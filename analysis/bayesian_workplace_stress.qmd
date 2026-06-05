@@ -65,6 +65,42 @@ column_inventory |>
   arrange(file)
 ```
 
+## Analysis 1 - Longitudinal Structure
+
+Before choosing a Bayesian model, we need to verify whether the same educators are observed across time points. This determines whether the model can use repeated-measure partial pooling, for example `(1 | StudyID)`, or whether the analysis should be treated as mostly cross-sectional by wave.
+
+```{r analysis-1-id-audit}
+id_audit <- audit_study_ids(timepoint_data, id_col = "StudyID")
+id_audit
+```
+
+```{r analysis-1-id-overlap}
+id_overlap <- build_id_overlap_matrix(timepoint_data, id_col = "StudyID")
+id_overlap
+```
+
+**Interpretation guide:** The diagonal shows the number of unique educators in each wave. Off-diagonal cells show how many educators appear in both waves. If overlap is high, a longitudinal hierarchical model is appropriate. If overlap is low, we may need a simpler repeated-wave or available-case approach.
+
+## Analysis 2 - Candidate Scale Scores
+
+The raw files contain many item-level survey columns. For a first Bayesian model, we should prefer validated or precomputed scale scores when available, then verify their meaning in the codebook. This chunk searches for columns that look like totals, sums, means, averages, or scale scores.
+
+```{r analysis-2-summary-columns}
+summary_columns <- find_summary_columns(timepoint_data)
+
+summary_columns |>
+  arrange(time_point, column)
+```
+
+```{r analysis-2-scale-profiles}
+scale_profiles <- profile_numeric_columns(timepoint_data, summary_columns)
+
+scale_profiles |>
+  arrange(time_point, column)
+```
+
+**Interpretation guide:** These columns are candidates, not final constructs. We will use the codebook to decide which score should become the primary outcome, such as perceived stress, burnout, depressive symptoms, job satisfaction, or teacher stress.
+
 ## Candidate Psychological Constructs
 
 This first pass searches column names for likely stress, demand, resource, well-being, and educator identifiers. These candidates will be verified against the codebook before modeling.

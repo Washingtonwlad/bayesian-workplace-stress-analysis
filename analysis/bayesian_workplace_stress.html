@@ -2215,6 +2215,8 @@ vertical-align: -.125em;
   <li><a href="#raw-data-inventory" id="toc-raw-data-inventory" class="nav-link" data-scroll-target="#raw-data-inventory">Raw Data Inventory</a></li>
   <li><a href="#time-point-files" id="toc-time-point-files" class="nav-link" data-scroll-target="#time-point-files">Time Point Files</a></li>
   <li><a href="#column-inventory" id="toc-column-inventory" class="nav-link" data-scroll-target="#column-inventory">Column Inventory</a></li>
+  <li><a href="#analysis-1---longitudinal-structure" id="toc-analysis-1---longitudinal-structure" class="nav-link" data-scroll-target="#analysis-1---longitudinal-structure">Analysis 1 - Longitudinal Structure</a></li>
+  <li><a href="#analysis-2---candidate-scale-scores" id="toc-analysis-2---candidate-scale-scores" class="nav-link" data-scroll-target="#analysis-2---candidate-scale-scores">Analysis 2 - Candidate Scale Scores</a></li>
   <li><a href="#candidate-psychological-constructs" id="toc-candidate-psychological-constructs" class="nav-link" data-scroll-target="#candidate-psychological-constructs">Candidate Psychological Constructs</a></li>
   <li><a href="#next-modeling-plan" id="toc-next-modeling-plan" class="nav-link" data-scroll-target="#next-modeling-plan">Next Modeling Plan</a></li>
   </ul>
@@ -2342,24 +2344,484 @@ tp4        tp4   42     364</code></pre>
 </div>
 </div>
 </section>
+<section id="analysis-1---longitudinal-structure" class="level2">
+<h2 class="anchored" data-anchor-id="analysis-1---longitudinal-structure">Analysis 1 - Longitudinal Structure</h2>
+<p>Before choosing a Bayesian model, we need to verify whether the same educators are observed across time points. This determines whether the model can use repeated-measure partial pooling, for example <code>(1 | StudyID)</code>, or whether the analysis should be treated as mostly cross-sectional by wave.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>id_audit <span class="ot">&lt;-</span> <span class="fu">audit_study_ids</span>(timepoint_data, <span class="at">id_col =</span> <span class="st">&quot;StudyID&quot;</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>id_audit</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>  time_point rows unique_ids missing_ids duplicated_ids
+1        tp1   67         67           0              0
+2        tp2   53         53           0              0
+3        tp3   45         45           0              0
+4        tp4   42         42           0              0</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>id_overlap <span class="ot">&lt;-</span> <span class="fu">build_id_overlap_matrix</span>(timepoint_data, <span class="at">id_col =</span> <span class="st">&quot;StudyID&quot;</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>id_overlap</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>    tp1 tp2 tp3 tp4
+tp1  67  53  45  42
+tp2  53  53  44  41
+tp3  45  44  45  41
+tp4  42  41  41  42</code></pre>
+</div>
+</div>
+<p><strong>Interpretation guide:</strong> The diagonal shows the number of unique educators in each wave. Off-diagonal cells show how many educators appear in both waves. If overlap is high, a longitudinal hierarchical model is appropriate. If overlap is low, we may need a simpler repeated-wave or available-case approach.</p>
+</section>
+<section id="analysis-2---candidate-scale-scores" class="level2">
+<h2 class="anchored" data-anchor-id="analysis-2---candidate-scale-scores">Analysis 2 - Candidate Scale Scores</h2>
+<p>The raw files contain many item-level survey columns. For a first Bayesian model, we should prefer validated or precomputed scale scores when available, then verify their meaning in the codebook. This chunk searches for columns that look like totals, sums, means, averages, or scale scores.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>summary_columns <span class="ot">&lt;-</span> <span class="fu">find_summary_columns</span>(timepoint_data)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>summary_columns <span class="sc">|&gt;</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(time_point, column)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>                                 time_point                           column
+Burn_DPav                               tp1                        Burn_DPav
+Burn_EEav                               tp1                        Burn_EEav
+Burn_PAav                               tp1                        Burn_PAav
+CESDsum_tp1                             tp1                      CESDsum_tp1
+FoodSecScoreTp1                         tp1                  FoodSecScoreTp1
+GA_TotalTp1                             tp1                      GA_TotalTp1
+JSWC_SUM_tp1                            tp1                     JSWC_SUM_tp1
+JS_Pay_Promotion_opp_SUM_TP1            tp1     JS_Pay_Promotion_opp_SUM_TP1
+JS_coworkers_SUM_tp1                    tp1             JS_coworkers_SUM_tp1
+JS_current_position_SUM_tp1             tp1      JS_current_position_SUM_tp1
+JS_my_work_SUM_tp1                      tp1               JS_my_work_SUM_tp1
+JS_supervisor_SUM_tp1                   tp1            JS_supervisor_SUM_tp1
+PSIsumTp1                               tp1                        PSIsumTp1
+TBSE_CMav                               tp1                        TBSE_CMav
+TBSE_CMsum                              tp1                       TBSE_CMsum
+TBSE_Eav                                tp1                         TBSE_Eav
+TBSE_Esum                               tp1                        TBSE_Esum
+TBSE_ISav                               tp1                        TBSE_ISav
+TBSE_ISsum                              tp1                       TBSE_ISsum
+TBSE_totalav                            tp1                     TBSE_totalav
+TBSE_totalsum                           tp1                    TBSE_totalsum
+TSI_BMav                                tp1                         TSI_BMav
+TSI_BMsum                               tp1                        TSI_BMsum
+TSI_CMav                                tp1                         TSI_CMav
+TSI_CMsum                               tp1                        TSI_CMsum
+TSI_DMav                                tp1                         TSI_DMav
+TSI_DMsum                               tp1                        TSI_DMsum
+TSI_EMav                                tp1                         TSI_EMav
+TSI_EMsum                               tp1                        TSI_EMsum
+TSI_FMav                                tp1                         TSI_FMav
+TSI_FMsum                               tp1                        TSI_FMsum
+TSI_GMav                                tp1                         TSI_GMav
+TSI_GMsum                               tp1                        TSI_GMsum
+TSI_PDav                                tp1                         TSI_PDav
+TSI_PDsum                               tp1                        TSI_PDsum
+TSI_PIav                                tp1                         TSI_PIav
+TSI_PIsum                               tp1                        TSI_PIsum
+TSI_TMav                                tp1                         TSI_TMav
+TSI_TMsum                               tp1                        TSI_TMsum
+TSI_WRav                                tp1                         TSI_WRav
+TSI_WRsum                               tp1                        TSI_WRsum
+TSI_mean                                tp1                         TSI_mean
+TSI_sum                                 tp1                          TSI_sum
+checkjs_current_position_SUM_TP1        tp1 checkjs_current_position_SUM_TP1
+gsE_sum                                 tp1                          gsE_sum
+CESDsum_tp2                             tp2                      CESDsum_tp2
+GA_Total_tp2                            tp2                     GA_Total_tp2
+PSIsum_tp2                              tp2                       PSIsum_tp2
+gsE_sum_tp2                             tp2                      gsE_sum_tp2
+TBSE_CMsum_tp3                          tp3                   TBSE_CMsum_tp3
+TBSE_Esum_tp3                           tp3                    TBSE_Esum_tp3
+TBSE_ISsum_tp3                          tp3                   TBSE_ISsum_tp3
+TBSE_totalav_tp3                        tp3                 TBSE_totalav_tp3
+TBSE_totalsum_tp3                       tp3                TBSE_totalsum_tp3
+TSI_BMsum_tp3                           tp3                    TSI_BMsum_tp3
+TSI_CMsum_tp3                           tp3                    TSI_CMsum_tp3
+TSI_DMsum_tp3                           tp3                    TSI_DMsum_tp3
+TSI_EMsum_tp3                           tp3                    TSI_EMsum_tp3
+TSI_FMsum_tp3                           tp3                    TSI_FMsum_tp3
+TSI_GMsum_tp3                           tp3                    TSI_GMsum_tp3
+TSI_PDsum_tp3                           tp3                    TSI_PDsum_tp3
+TSI_PIsum_tp3                           tp3                    TSI_PIsum_tp3
+TSI_TMsum_tp3                           tp3                    TSI_TMsum_tp3
+TSI_WRsum_tp3                           tp3                    TSI_WRsum_tp3
+TSI_mean_tp3                            tp3                     TSI_mean_tp3
+TSI_sum_tp3                             tp3                      TSI_sum_tp3
+js_coworkers_SUM_tp3                    tp3             js_coworkers_SUM_tp3
+js_current_position_SUM_tp3             tp3      js_current_position_SUM_tp3
+js_my_work_SUM_tp3                      tp3               js_my_work_SUM_tp3
+js_pay_promotion_opp_SUM_tp3            tp3     js_pay_promotion_opp_SUM_tp3
+js_supervisor_SUM_tp3                   tp3            js_supervisor_SUM_tp3
+jswc_SUM_tp3                            tp3                     jswc_SUM_tp3
+CESDsum_tp4                             tp4                      CESDsum_tp4
+GA_Total                                tp4                         GA_Total
+PSIsum_TP4                              tp4                       PSIsum_TP4
+TBSE_CMsum_tp4                          tp4                   TBSE_CMsum_tp4
+TBSE_Esum_tp4                           tp4                    TBSE_Esum_tp4
+TBSE_ISsum_tp4                          tp4                   TBSE_ISsum_tp4
+TBSE_totalav_tp4                        tp4                 TBSE_totalav_tp4
+TBSE_totalsum_tp4                       tp4                TBSE_totalsum_tp4
+TSI_BMsum_tp4                           tp4                    TSI_BMsum_tp4
+TSI_CMsum_tp4                           tp4                    TSI_CMsum_tp4
+TSI_DMsum_tp4                           tp4                    TSI_DMsum_tp4
+TSI_EMsum_tp4                           tp4                    TSI_EMsum_tp4
+TSI_FMsum_tp4                           tp4                    TSI_FMsum_tp4
+TSI_GMsum_tp4                           tp4                    TSI_GMsum_tp4
+TSI_PDsum_tp4                           tp4                    TSI_PDsum_tp4
+TSI_PIsum_tp4                           tp4                    TSI_PIsum_tp4
+TSI_TMsum_tp4                           tp4                    TSI_TMsum_tp4
+TSI_WRsum_tp4                           tp4                    TSI_WRsum_tp4
+TSI_mean_tp4                            tp4                     TSI_mean_tp4
+TSI_sum_tp4                             tp4                      TSI_sum_tp4
+gsE_sum_tp4                             tp4                      gsE_sum_tp4
+js_coworkers_SUM_tp4                    tp4             js_coworkers_SUM_tp4
+js_current_position_SUM_tp4             tp4      js_current_position_SUM_tp4
+js_my_work_SUM_tp4                      tp4               js_my_work_SUM_tp4
+js_pay_promotion_opp_SUM_tp4            tp4     js_pay_promotion_opp_SUM_tp4
+js_supervisor_SUM_tp4                   tp4            js_supervisor_SUM_tp4
+jswc_SUM_tp4                            tp4                     jswc_SUM_tp4
+                                 missing_rate
+Burn_DPav                          0.10447761
+Burn_EEav                          0.10447761
+Burn_PAav                          0.10447761
+CESDsum_tp1                        0.10447761
+FoodSecScoreTp1                    0.02985075
+GA_TotalTp1                        0.08955224
+JSWC_SUM_tp1                       0.10447761
+JS_Pay_Promotion_opp_SUM_TP1       0.11940299
+JS_coworkers_SUM_tp1               0.11940299
+JS_current_position_SUM_tp1        0.10447761
+JS_my_work_SUM_tp1                 0.10447761
+JS_supervisor_SUM_tp1              0.11940299
+PSIsumTp1                          0.08955224
+TBSE_CMav                          0.07462687
+TBSE_CMsum                         0.07462687
+TBSE_Eav                           0.07462687
+TBSE_Esum                          0.07462687
+TBSE_ISav                          0.07462687
+TBSE_ISsum                         0.07462687
+TBSE_totalav                       0.07462687
+TBSE_totalsum                      0.07462687
+TSI_BMav                           0.10447761
+TSI_BMsum                          0.10447761
+TSI_CMav                           0.10447761
+TSI_CMsum                          0.10447761
+TSI_DMav                           0.08955224
+TSI_DMsum                          0.08955224
+TSI_EMav                           0.10447761
+TSI_EMsum                          0.10447761
+TSI_FMav                           0.11940299
+TSI_FMsum                          0.11940299
+TSI_GMav                           0.10447761
+TSI_GMsum                          0.10447761
+TSI_PDav                           0.07462687
+TSI_PDsum                          0.07462687
+TSI_PIav                           0.08955224
+TSI_PIsum                          0.08955224
+TSI_TMav                           0.07462687
+TSI_TMsum                          0.07462687
+TSI_WRav                           0.07462687
+TSI_WRsum                          0.07462687
+TSI_mean                           0.07462687
+TSI_sum                            0.07462687
+checkjs_current_position_SUM_TP1   0.10447761
+gsE_sum                            0.10447761
+CESDsum_tp2                        0.00000000
+GA_Total_tp2                       0.00000000
+PSIsum_tp2                         0.00000000
+gsE_sum_tp2                        0.01886792
+TBSE_CMsum_tp3                     0.00000000
+TBSE_Esum_tp3                      0.00000000
+TBSE_ISsum_tp3                     0.00000000
+TBSE_totalav_tp3                   0.00000000
+TBSE_totalsum_tp3                  0.00000000
+TSI_BMsum_tp3                      0.00000000
+TSI_CMsum_tp3                      0.00000000
+TSI_DMsum_tp3                      0.00000000
+TSI_EMsum_tp3                      0.00000000
+TSI_FMsum_tp3                      0.00000000
+TSI_GMsum_tp3                      0.00000000
+TSI_PDsum_tp3                      0.00000000
+TSI_PIsum_tp3                      0.00000000
+TSI_TMsum_tp3                      0.00000000
+TSI_WRsum_tp3                      0.00000000
+TSI_mean_tp3                       0.00000000
+TSI_sum_tp3                        0.00000000
+js_coworkers_SUM_tp3               0.06666667
+js_current_position_SUM_tp3        0.04444444
+js_my_work_SUM_tp3                 0.04444444
+js_pay_promotion_opp_SUM_tp3       0.04444444
+js_supervisor_SUM_tp3              0.04444444
+jswc_SUM_tp3                       0.15555556
+CESDsum_tp4                        0.04761905
+GA_Total                           0.04761905
+PSIsum_TP4                         0.04761905
+TBSE_CMsum_tp4                     0.02380952
+TBSE_Esum_tp4                      0.00000000
+TBSE_ISsum_tp4                     0.00000000
+TBSE_totalav_tp4                   0.02380952
+TBSE_totalsum_tp4                  0.02380952
+TSI_BMsum_tp4                      0.02380952
+TSI_CMsum_tp4                      0.02380952
+TSI_DMsum_tp4                      0.02380952
+TSI_EMsum_tp4                      0.02380952
+TSI_FMsum_tp4                      0.02380952
+TSI_GMsum_tp4                      0.02380952
+TSI_PDsum_tp4                      0.02380952
+TSI_PIsum_tp4                      0.02380952
+TSI_TMsum_tp4                      0.02380952
+TSI_WRsum_tp4                      0.02380952
+TSI_mean_tp4                       0.02380952
+TSI_sum_tp4                        0.02380952
+gsE_sum_tp4                        0.02380952
+js_coworkers_SUM_tp4               0.00000000
+js_current_position_SUM_tp4        0.02380952
+js_my_work_SUM_tp4                 0.07142857
+js_pay_promotion_opp_SUM_tp4       0.00000000
+js_supervisor_SUM_tp4              0.11904762
+jswc_SUM_tp4                       0.04761905</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>scale_profiles <span class="ot">&lt;-</span> <span class="fu">profile_numeric_columns</span>(timepoint_data, summary_columns)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>scale_profiles <span class="sc">|&gt;</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(time_point, column)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>   time_point                           column n_observed        mean
+1         tp1                        Burn_DPav         60   1.0166667
+2         tp1                        Burn_EEav         60   2.9092593
+3         tp1                        Burn_PAav         60   4.4648810
+4         tp1                      CESDsum_tp1         60  20.0000000
+5         tp1                  FoodSecScoreTp1         65   1.3076923
+6         tp1                      GA_TotalTp1         61   8.0327869
+7         tp1                     JSWC_SUM_tp1         60  25.9166667
+8         tp1     JS_Pay_Promotion_opp_SUM_TP1         59  19.3220339
+9         tp1             JS_coworkers_SUM_tp1         59  28.3898305
+10        tp1      JS_current_position_SUM_tp1         60  11.6833333
+11        tp1               JS_my_work_SUM_tp1         60  26.1833333
+12        tp1            JS_supervisor_SUM_tp1         59  28.9322034
+13        tp1                        PSIsumTp1         61  20.7377049
+14        tp1                        TBSE_CMav         62   4.2177419
+15        tp1                       TBSE_CMsum         62  17.2741935
+16        tp1                         TBSE_Eav         62   4.3965054
+17        tp1                        TBSE_Esum         62  16.7741935
+18        tp1                        TBSE_ISav         62   4.5940860
+19        tp1                       TBSE_ISsum         62  17.2741935
+20        tp1                     TBSE_totalav         62  13.2083333
+21        tp1                    TBSE_totalsum         62  51.3225806
+22        tp1                         TSI_BMav         60   0.5541667
+23        tp1                        TSI_BMsum         60   2.2166667
+24        tp1                         TSI_CMav         60   1.4611111
+25        tp1                        TSI_CMsum         60   4.3833333
+26        tp1                         TSI_DMav         61   1.3814208
+27        tp1                        TSI_DMsum         61   8.2131148
+28        tp1                         TSI_EMav         60   1.9408333
+29        tp1                        TSI_EMsum         60   9.6833333
+30        tp1                         TSI_FMav         59   1.9466102
+31        tp1                        TSI_FMsum         59   9.6949153
+32        tp1                         TSI_GMav         60   1.1972222
+33        tp1                        TSI_GMsum         60   3.5500000
+34        tp1                         TSI_PDav         62   1.6161290
+35        tp1                        TSI_PDsum         62   8.0806452
+36        tp1                         TSI_PIav         61   1.2500000
+37        tp1                        TSI_PIsum         61   5.0000000
+38        tp1                         TSI_TMav         62   2.2612327
+39        tp1                        TSI_TMsum         62  18.0322581
+40        tp1                         TSI_WRav         62   1.9220430
+41        tp1                        TSI_WRsum         62  11.3387097
+42        tp1                         TSI_mean         62  15.2278994
+43        tp1                          TSI_sum         62  78.8709677
+44        tp1 checkjs_current_position_SUM_TP1         60  11.6333333
+45        tp1                          gsE_sum         60  20.8333333
+46        tp2                      CESDsum_tp2         53  18.9245283
+47        tp2                     GA_Total_tp2         53   7.6792453
+48        tp2                       PSIsum_tp2         53  19.8113208
+49        tp2                      gsE_sum_tp2         52  20.1923077
+50        tp3                   TBSE_CMsum_tp3         45  21.7111111
+51        tp3                    TBSE_Esum_tp3         45  23.6000000
+52        tp3                   TBSE_ISsum_tp3         45  24.2444444
+53        tp3                 TBSE_totalav_tp3         45  17.3888889
+54        tp3                TBSE_totalsum_tp3         45  69.5555556
+55        tp3                    TSI_BMsum_tp3         45   2.4222222
+56        tp3                    TSI_CMsum_tp3         45   4.3111111
+57        tp3                    TSI_DMsum_tp3         45   9.7333333
+58        tp3                    TSI_EMsum_tp3         45  10.1333333
+59        tp3                    TSI_FMsum_tp3         45  10.2000000
+60        tp3                    TSI_GMsum_tp3         45   3.7111111
+61        tp3                    TSI_PDsum_tp3         45   8.2444444
+62        tp3                    TSI_PIsum_tp3         45   5.2888889
+63        tp3                    TSI_TMsum_tp3         45  17.3333333
+64        tp3                    TSI_WRsum_tp3         45  12.6222222
+65        tp3                     TSI_mean_tp3         45  16.3274603
+66        tp3                      TSI_sum_tp3         45  84.0000000
+67        tp3             js_coworkers_SUM_tp3         42  29.8809524
+68        tp3      js_current_position_SUM_tp3         43  11.1860465
+69        tp3               js_my_work_SUM_tp3         43  26.3488372
+70        tp3     js_pay_promotion_opp_SUM_tp3         43  19.0000000
+71        tp3            js_supervisor_SUM_tp3         43  28.8139535
+72        tp3                     jswc_SUM_tp3         38  24.7631579
+73        tp4                      CESDsum_tp4         40  18.7250000
+74        tp4                         GA_Total         40 -18.0250000
+75        tp4                       PSIsum_TP4         40  19.1250000
+76        tp4                   TBSE_CMsum_tp4         41  22.8536585
+77        tp4                    TBSE_Esum_tp4         42  23.8095238
+78        tp4                   TBSE_ISsum_tp4         42  24.0000000
+79        tp4                 TBSE_totalav_tp4         41   5.8760163
+80        tp4                TBSE_totalsum_tp4         41  70.5121951
+81        tp4                    TSI_BMsum_tp4         41   2.6585366
+82        tp4                    TSI_CMsum_tp4         41   4.9024390
+83        tp4                    TSI_DMsum_tp4         41   9.4878049
+84        tp4                    TSI_EMsum_tp4         41  10.8780488
+85        tp4                    TSI_FMsum_tp4         41 -38.5853659
+86        tp4                    TSI_GMsum_tp4         41 -21.0000000
+87        tp4                    TSI_PDsum_tp4         41 -15.9024390
+88        tp4                    TSI_PIsum_tp4         41 -18.9268293
+89        tp4                    TSI_TMsum_tp4         41 -32.1707317
+90        tp4                    TSI_WRsum_tp4         41 -37.6341463
+91        tp4                     TSI_mean_tp4         41  16.5232578
+92        tp4                      TSI_sum_tp4         41  84.7073171
+93        tp4                      gsE_sum_tp4         41  21.7073171
+94        tp4             js_coworkers_SUM_tp4         42  28.2380952
+95        tp4      js_current_position_SUM_tp4         41  11.5365854
+96        tp4               js_my_work_SUM_tp4         39  26.0256410
+97        tp4     js_pay_promotion_opp_SUM_tp4         42  19.8095238
+98        tp4            js_supervisor_SUM_tp4         37  28.1081081
+99        tp4                     jswc_SUM_tp4         40  25.1750000
+            sd           min        max
+1    1.0286434    0.00000000   3.600000
+2    1.5958583    0.00000000   5.444444
+3    0.9508182    2.12500000   5.875000
+4   11.8978705    2.00000000  46.000000
+5    0.6104065    1.00000000   3.000000
+6    5.9748562    0.00000000  21.000000
+7    6.4893437    6.00000000  38.000000
+8    5.6581972    3.00000000  37.000000
+9    6.0086631   15.00000000  39.000000
+10   3.8333579    1.00000000  20.000000
+11   5.2577358   12.00000000  39.000000
+12   5.4925166   17.00000000  40.000000
+13   7.4384175    4.00000000  34.000000
+14   1.8573535    1.50000000   8.000000
+15   9.3197646    5.00000000  32.000000
+16   2.0958197    0.66666667   8.000000
+17   9.0125947    2.00000000  32.000000
+18   2.1062663    1.66666667   8.000000
+19   9.3197646    5.00000000  32.000000
+20   5.8759325    3.83333333  24.000000
+21  27.3014587   12.00000000  96.000000
+22   0.7550559    0.00000000   3.500000
+23   3.0202237    0.00000000  14.000000
+24   1.1466674    0.00000000   4.000000
+25   3.4400023    0.00000000  12.000000
+26   0.9539688    0.00000000   3.500000
+27   5.7158107    0.00000000  21.000000
+28   1.1518037    0.00000000   4.000000
+29   5.7739675    0.00000000  20.000000
+30   1.1937649    0.00000000   4.000000
+31   5.9661523    0.00000000  20.000000
+32   1.2489135    0.00000000   4.000000
+33   3.7163177    0.00000000  12.000000
+34   0.9004905    0.00000000   3.800000
+35   4.5024525    0.00000000  19.000000
+36   0.9574271    0.00000000   3.500000
+37   3.8297084    0.00000000  14.000000
+38   0.7663834    0.75000000   4.000000
+39   6.1590071    6.00000000  32.000000
+40   0.9684070    0.00000000   4.000000
+41   5.5837691    0.00000000  23.000000
+42   6.7435098    1.44166667  28.608333
+43  32.3659829   10.00000000 144.000000
+44   3.9011805    1.00000000  20.000000
+45   3.8977032   10.00000000  29.000000
+46  11.4031862    2.00000000  45.000000
+47   5.2651744    0.00000000  21.000000
+48   6.3912699    4.00000000  32.000000
+49   3.9903730   13.00000000  29.000000
+50   5.6833978    4.00000000  32.000000
+51   3.9965895   15.00000000  32.000000
+52   4.8484091   13.00000000  32.000000
+53   3.1584822   11.50000000  24.000000
+54  12.6339290   46.00000000  96.000000
+55   2.9036724    0.00000000  10.000000
+56   3.8008505    0.00000000  12.000000
+57   6.3760917    0.00000000  24.000000
+58   6.3015150    0.00000000  20.000000
+59   5.3623265    1.00000000  20.000000
+60   3.8883405    0.00000000  12.000000
+61   4.2219963    0.00000000  16.000000
+62   3.8472081    0.00000000  14.000000
+63   6.6195303    7.00000000  32.000000
+64   5.3355109    3.00000000  24.000000
+65   6.5818963    6.08333333  30.683333
+66  30.6534886   37.00000000 149.000000
+67   5.5180519   17.00000000  39.000000
+68   3.4795718    1.00000000  20.000000
+69   4.7352966   19.00000000  35.000000
+70   4.9809160    6.00000000  29.000000
+71   6.6984569   12.00000000  40.000000
+72   5.3546353   13.00000000  35.000000
+73  11.3363213    1.00000000  44.000000
+74 159.1845385 -999.00000000  21.000000
+75   6.9988552    6.00000000  32.000000
+76   6.2030677    1.00000000  32.000000
+77   5.5972035    0.00000000  32.000000
+78   6.0526148    0.00000000  32.000000
+79   1.4126317    0.08333333   8.000000
+80  16.9515810    1.00000000  96.000000
+81   2.6609186    0.00000000   9.000000
+82   3.8262572    0.00000000  12.000000
+83   5.5862418    0.00000000  24.000000
+84   6.1081713    0.00000000  20.000000
+85 220.2463366 -999.00000000  20.000000
+86 156.5985313 -999.00000000  12.000000
+87 157.4623455 -999.00000000  20.000000
+88 156.9320538 -999.00000000  16.000000
+89 221.7409415 -999.00000000  32.000000
+90 220.4709455 -999.00000000  23.000000
+91   6.1498121    5.18333333  35.033333
+92  29.2166424   26.00000000 175.000000
+93   4.8230898    7.00000000  30.000000
+94   4.3662202   18.00000000  36.000000
+95   3.1072300    4.00000000  18.000000
+96   5.1066890   14.00000000  36.000000
+97   5.9108750    7.00000000  32.000000
+98   6.7691448   10.00000000  40.000000
+99   4.8721474   15.00000000  35.000000</code></pre>
+</div>
+</div>
+<p><strong>Interpretation guide:</strong> These columns are candidates, not final constructs. We will use the codebook to decide which score should become the primary outcome, such as perceived stress, burnout, depressive symptoms, job satisfaction, or teacher stress.</p>
+</section>
 <section id="candidate-psychological-constructs" class="level2">
 <h2 class="anchored" data-anchor-id="candidate-psychological-constructs">Candidate Psychological Constructs</h2>
 <p>This first pass searches column names for likely stress, demand, resource, well-being, and educator identifiers. These candidates will be verified against the codebook before modeling.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>candidate_patterns <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;stress&quot;</span>, <span class="st">&quot;burn&quot;</span>, <span class="st">&quot;well&quot;</span>, <span class="st">&quot;demand&quot;</span>, <span class="st">&quot;resource&quot;</span>, <span class="st">&quot;support&quot;</span>,</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;depress&quot;</span>, <span class="st">&quot;anx&quot;</span>, <span class="st">&quot;effic&quot;</span>, <span class="st">&quot;satisf&quot;</span>, <span class="st">&quot;job&quot;</span>, <span class="st">&quot;work&quot;</span>, <span class="st">&quot;teacher&quot;</span>,</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;center&quot;</span>, <span class="st">&quot;site&quot;</span>, <span class="st">&quot;id&quot;</span></span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>candidates <span class="ot">&lt;-</span> <span class="fu">find_candidate_columns</span>(column_inventory, candidate_patterns)</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>candidates <span class="sc">|&gt;</span></span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(file, column) <span class="sc">|&gt;</span></span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, column, missing_rate) <span class="sc">|&gt;</span></span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">head</span>(<span class="dv">80</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>candidate_patterns <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;stress&quot;</span>, <span class="st">&quot;burn&quot;</span>, <span class="st">&quot;well&quot;</span>, <span class="st">&quot;demand&quot;</span>, <span class="st">&quot;resource&quot;</span>, <span class="st">&quot;support&quot;</span>,</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;depress&quot;</span>, <span class="st">&quot;anx&quot;</span>, <span class="st">&quot;effic&quot;</span>, <span class="st">&quot;satisf&quot;</span>, <span class="st">&quot;job&quot;</span>, <span class="st">&quot;work&quot;</span>, <span class="st">&quot;teacher&quot;</span>,</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;center&quot;</span>, <span class="st">&quot;site&quot;</span>, <span class="st">&quot;id&quot;</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>candidates <span class="ot">&lt;-</span> <span class="fu">find_candidate_columns</span>(column_inventory, candidate_patterns)</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>candidates <span class="sc">|&gt;</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(file, column) <span class="sc">|&gt;</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, column, missing_rate) <span class="sc">|&gt;</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">head</span>(<span class="dv">80</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>                                        file               column missing_rate
