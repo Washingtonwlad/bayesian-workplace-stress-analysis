@@ -1,0 +1,99 @@
+---
+title: "Bayesian Hierarchical Modeling of Workplace Stress"
+author: "Washington Casamen Nolasco"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    code-fold: true
+    code-summary: "Show code"
+    theme: cosmo
+    highlight-style: github
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+  echo: true
+knitr:
+  opts_knit:
+    root.dir: "../"
+---
+
+## Overview
+
+This report develops a Bayesian hierarchical analysis of workplace stress and well-being among early childhood educators. The project focuses on repeated measurements, uncertainty, and practical interpretation for behavioral data science and occupational psychology.
+
+## Research Question
+
+How do workplace demands, work resources, and time-varying factors relate to educator stress, and how much uncertainty remains after accounting for repeated observations within educators?
+
+## Setup
+
+```{r setup}
+source("R/data_dictionary.R")
+source("R/prepare_data.R")
+source("R/model_functions.R")
+
+library(dplyr)
+library(ggplot2)
+```
+
+## Raw Data Inventory
+
+```{r raw-inventory}
+raw_inventory <- raw_file_inventory("data/raw")
+raw_inventory
+```
+
+## Time Point Files
+
+```{r timepoint-summary}
+timepoint_data <- load_timepoint_data("data/raw")
+timepoint_summary <- summarise_timepoints(timepoint_data)
+timepoint_summary
+```
+
+## Column Inventory
+
+```{r column-inventory}
+column_inventory <- csv_column_inventory("data/raw")
+
+column_inventory |>
+  count(file, name = "columns") |>
+  arrange(file)
+```
+
+## Candidate Psychological Constructs
+
+This first pass searches column names for likely stress, demand, resource, well-being, and educator identifiers. These candidates will be verified against the codebook before modeling.
+
+```{r candidate-columns}
+candidate_patterns <- c(
+  "stress", "burn", "well", "demand", "resource", "support",
+  "depress", "anx", "effic", "satisf", "job", "work", "teacher",
+  "center", "site", "id"
+)
+
+candidates <- find_candidate_columns(column_inventory, candidate_patterns)
+
+candidates |>
+  arrange(file, column) |>
+  select(file, column, missing_rate) |>
+  head(80)
+```
+
+## Next Modeling Plan
+
+The next step is to use the codebook to define:
+
+- the primary stress or well-being outcome;
+- educator identifier;
+- center or site identifier, if available;
+- repeated-measure time variable;
+- job demand predictors;
+- job resource predictors;
+- demographic or professional covariates.
+
+The first Bayesian model will be intentionally simple. Once variable definitions are verified, the project will move to a hierarchical longitudinal model.
