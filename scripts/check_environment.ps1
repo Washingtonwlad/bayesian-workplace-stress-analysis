@@ -1,21 +1,65 @@
 param(
-    [string]$RHome = "C:\Program Files\R\R-4.3.3"
+    [string]$RHome = "",
+    [string]$QuartoBin = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-if (Test-Path $RHome) {
-    $env:R_HOME = $RHome
-    $env:Path = "$RHome\bin\x64;$RHome\bin;$env:Path"
+function Resolve-FirstExistingPath {
+    param([string[]]$Candidates)
+
+    foreach ($candidate in $Candidates) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+
+    return $null
 }
 
+if (-not $RHome) {
+    $RHome = Resolve-FirstExistingPath @(
+        "D:\Washington\Programas\R\R-4.5.2",
+        "C:\Program Files\R\R-4.5.2",
+        "C:\Program Files\R\R-4.3.3"
+    )
+}
+
+if (-not (Test-Path $RHome)) {
+    throw "R installation not found at: $RHome"
+}
+
+$env:R_HOME = $RHome
+$env:Path = "$RHome\bin\x64;$RHome\bin;$env:Path"
+
+if (-not $QuartoBin) {
+    $QuartoBin = Resolve-FirstExistingPath @(
+        "D:\Washington\Programas\Positron\Positron\resources\app\quarto\bin\quarto.exe",
+        "D:\Washington\Programas\RStudio\resources\app\bin\quarto\bin\quarto.exe",
+        "C:\Program Files\Quarto\bin\quarto.exe"
+    )
+}
+
+if (-not $QuartoBin) {
+    throw "Quarto executable not found. Pass -QuartoBin with the path to quarto.exe."
+}
+
+$env:Path = "$(Split-Path $QuartoBin -Parent);$env:Path"
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$quartoLocalAppData = Join-Path $repoRoot ".quarto-local"
+New-Item -ItemType Directory -Force $quartoLocalAppData | Out-Null
+$env:LOCALAPPDATA = $quartoLocalAppData
+
 Write-Host "Rscript:"
-Rscript --version
+& (Join-Path $RHome "bin\Rscript.exe") --version
 
 Write-Host ""
 Write-Host "Required R packages:"
-Rscript -e "pkgs <- c('dplyr','ggplot2','readr','tidyr','knitr','rmarkdown','brms','posterior','bayesplot','loo'); print(data.frame(package=pkgs, installed=sapply(pkgs, requireNamespace, quietly=TRUE)), row.names=FALSE)"
+& (Join-Path $RHome "bin\Rscript.exe") -e "pkgs <- c('dplyr','ggplot2','readr','tidyr','knitr','rmarkdown','brms','posterior','bayesplot','loo'); print(data.frame(package=pkgs, installed=sapply(pkgs, requireNamespace, quietly=TRUE)), row.names=FALSE)"
 
 Write-Host ""
 Write-Host "Quarto:"
-quarto check
+& $QuartoBin check
+if ($LASTEXITCODE -ne 0) {
+    throw "Quarto check failed with exit code $LASTEXITCODE."
+}

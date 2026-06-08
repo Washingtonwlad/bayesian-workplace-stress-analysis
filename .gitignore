@@ -25,6 +25,7 @@ models/
 .positron/
 .vscode/
 .positai
+.quarto-local/
 
 # OS files
 Thumbs.db
