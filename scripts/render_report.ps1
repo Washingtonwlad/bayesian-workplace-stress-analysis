@@ -36,6 +36,7 @@ if (-not $QuartoBin) {
     $QuartoBin = Resolve-FirstExistingPath @(
         "D:\Washington\Programas\Positron\Positron\resources\app\quarto\bin\quarto.exe",
         "D:\Washington\Programas\RStudio\resources\app\bin\quarto\bin\quarto.exe",
+        "E:\PC\Programas\Quarto\bin\quarto.exe",
         "C:\Program Files\Quarto\bin\quarto.exe"
     )
 }
@@ -48,9 +49,6 @@ $env:Path = "$(Split-Path $QuartoBin -Parent);$env:Path"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
-$quartoLocalAppData = Join-Path $repoRoot ".quarto-local"
-New-Item -ItemType Directory -Force $quartoLocalAppData | Out-Null
-$env:LOCALAPPDATA = $quartoLocalAppData
 
 $sassCache = Join-Path $env:LOCALAPPDATA "quarto\sass"
 if (Test-Path $sassCache) {

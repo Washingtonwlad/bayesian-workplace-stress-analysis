@@ -101,6 +101,182 @@ scale_profiles |>
 
 **Interpretation guide:** These columns are candidates, not final constructs. We will use the codebook to decide which score should become the primary outcome, such as perceived stress, burnout, depressive symptoms, job satisfaction, or teacher stress.
 
+## Analysis 3 - Core Scale Panel
+
+This kernel builds the first reduced longitudinal analysis table. The goal is not yet to fit a model, but to create a person-time panel with the most promising psychological scale scores. Because the raw files use different column names across time points, each construct is harmonized manually.
+
+The cleaning step converts special missing-value codes such as `-999`, `-99`, and `-9` into real `NA` values. This matters because those codes would otherwise distort means, ranges, correlations, and Bayesian model estimates.
+
+```{r analysis-3-core-scale-panel}
+clean_missing_codes <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  x[x %in% c(-999, -99, -9)] <- NA_real_
+  x
+}
+
+pick_col <- function(dat, candidates) {
+  found <- candidates[candidates %in% names(dat)]
+
+  if (length(found) == 0) {
+    return(rep(NA_real_, nrow(dat)))
+  }
+
+  clean_missing_codes(dat[[found[1]]])
+}
+
+core_scale_panel <- bind_rows(
+  data.frame(
+    StudyID = as.character(timepoint_data$tp1$StudyID),
+    time_point = "tp1",
+    perceived_stress = pick_col(timepoint_data$tp1, c("PSIsumTp1")),
+    teacher_stress = pick_col(timepoint_data$tp1, c("TSI_mean")),
+    burnout_emotional_exhaustion = pick_col(timepoint_data$tp1, c("Burn_EEav")),
+    depressive_symptoms = pick_col(timepoint_data$tp1, c("CESDsum_tp1")),
+    anxiety = pick_col(timepoint_data$tp1, c("GA_TotalTp1")),
+    self_efficacy = pick_col(timepoint_data$tp1, c("TBSE_totalav")),
+    job_satisfaction_work = pick_col(timepoint_data$tp1, c("JS_my_work_SUM_tp1"))
+  ),
+  data.frame(
+    StudyID = as.character(timepoint_data$tp2$StudyID),
+    time_point = "tp2",
+    perceived_stress = pick_col(timepoint_data$tp2, c("PSIsum_tp2")),
+    teacher_stress = NA_real_,
+    burnout_emotional_exhaustion = NA_real_,
+    depressive_symptoms = pick_col(timepoint_data$tp2, c("CESDsum_tp2")),
+    anxiety = pick_col(timepoint_data$tp2, c("GA_Total_tp2")),
+    self_efficacy = pick_col(timepoint_data$tp2, c("gsE_sum_tp2")),
+    job_satisfaction_work = NA_real_
+  ),
+  data.frame(
+    StudyID = as.character(timepoint_data$tp3$StudyID),
+    time_point = "tp3",
+    perceived_stress = NA_real_,
+    teacher_stress = pick_col(timepoint_data$tp3, c("TSI_mean_tp3")),
+    burnout_emotional_exhaustion = pick_col(timepoint_data$tp3, c("Burn_EEav_tp3")),
+    depressive_symptoms = NA_real_,
+    anxiety = NA_real_,
+    self_efficacy = pick_col(timepoint_data$tp3, c("TBSE_totalav_tp3")),
+    job_satisfaction_work = pick_col(timepoint_data$tp3, c("js_my_work_SUM_tp3"))
+  ),
+  data.frame(
+    StudyID = as.character(timepoint_data$tp4$StudyID),
+    time_point = "tp4",
+    perceived_stress = pick_col(timepoint_data$tp4, c("PSIsum_TP4")),
+    teacher_stress = pick_col(timepoint_data$tp4, c("TSI_mean_tp4")),
+    burnout_emotional_exhaustion = NA_real_,
+    depressive_symptoms = pick_col(timepoint_data$tp4, c("CESDsum_tp4")),
+    anxiety = pick_col(timepoint_data$tp4, c("GA_Total")),
+    self_efficacy = pick_col(timepoint_data$tp4, c("TBSE_totalav_tp4")),
+    job_satisfaction_work = pick_col(timepoint_data$tp4, c("js_my_work_SUM_tp4"))
+  )
+) |>
+  mutate(
+    time_point = factor(time_point, levels = c("tp1", "tp2", "tp3", "tp4")),
+    time_index = as.integer(time_point)
+  )
+
+core_scale_panel |>
+  summarise(
+    rows = n(),
+    educators = n_distinct(StudyID),
+    across(
+      c(
+        perceived_stress,
+        teacher_stress,
+        burnout_emotional_exhaustion,
+        depressive_symptoms,
+        anxiety,
+        self_efficacy,
+        job_satisfaction_work
+      ),
+      ~ sum(!is.na(.x)),
+      .names = "n_{.col}"
+    )
+  )
+```
+
+**Interpretation guide:** The counts show which constructs have enough observed values for modeling. A construct measured in several waves can support longitudinal modeling. A construct measured only once is better treated as a baseline predictor or descriptive endpoint.
+
+## Analysis 4 - Scale Coverage by Time Point
+
+The previous kernel showed total coverage across all waves. This kernel breaks coverage down by time point. This matters because a variable can have a high total count but still be unavailable in key waves. For longitudinal Bayesian modeling, the best outcome is usually a construct measured repeatedly across several time points.
+
+```{r analysis-4-coverage-by-time}
+scale_coverage_by_time <- core_scale_panel |>
+  group_by(time_point) |>
+  summarise(
+    rows = n(),
+    educators = n_distinct(StudyID),
+    across(
+      c(
+        perceived_stress,
+        teacher_stress,
+        burnout_emotional_exhaustion,
+        depressive_symptoms,
+        anxiety,
+        self_efficacy,
+        job_satisfaction_work
+      ),
+      ~ sum(!is.na(.x)),
+      .names = "n_{.col}"
+    ),
+    .groups = "drop"
+  )
+
+scale_coverage_by_time
+```
+
+```{r analysis-4-scale-distributions}
+scale_distribution_summary <- core_scale_panel |>
+  summarise(
+    across(
+      c(
+        perceived_stress,
+        teacher_stress,
+        burnout_emotional_exhaustion,
+        depressive_symptoms,
+        anxiety,
+        self_efficacy,
+        job_satisfaction_work
+      ),
+      list(
+        n = ~ sum(!is.na(.x)),
+        mean = ~ mean(.x, na.rm = TRUE),
+        sd = ~ sd(.x, na.rm = TRUE),
+        min = ~ min(.x, na.rm = TRUE),
+        max = ~ max(.x, na.rm = TRUE)
+      ),
+      .names = "{.col}_{.fn}"
+    )
+  )
+
+scale_distribution_summary
+```
+
+```{r analysis-4-long-format-preview}
+core_scale_long <- core_scale_panel |>
+  tidyr::pivot_longer(
+    cols = c(
+      perceived_stress,
+      teacher_stress,
+      burnout_emotional_exhaustion,
+      depressive_symptoms,
+      anxiety,
+      self_efficacy,
+      job_satisfaction_work
+    ),
+    names_to = "construct",
+    values_to = "value"
+  ) |>
+  filter(!is.na(value))
+
+core_scale_long |>
+  count(construct, time_point) |>
+  arrange(construct, time_point)
+```
+
+**Interpretation guide:** A strong first outcome should have repeated coverage across at least three waves, a sensible numeric range, and no remaining special missing codes. If two outcomes are plausible, we will prefer the one that best matches the project's psychological question.
+
 ## Candidate Psychological Constructs
 
 This first pass searches column names for likely stress, demand, resource, well-being, and educator identifiers. These candidates will be verified against the codebook before modeling.

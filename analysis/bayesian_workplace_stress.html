@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Washington Casamen Nolasco">
-<meta name="dcterms.date" content="2026-06-06">
+<meta name="dcterms.date" content="2026-06-08">
 
 <title>Bayesian Hierarchical Modeling of Workplace Stress</title>
 <style>
@@ -2217,6 +2217,8 @@ vertical-align: -.125em;
   <li><a href="#column-inventory" id="toc-column-inventory" class="nav-link" data-scroll-target="#column-inventory">Column Inventory</a></li>
   <li><a href="#analysis-1---longitudinal-structure" id="toc-analysis-1---longitudinal-structure" class="nav-link" data-scroll-target="#analysis-1---longitudinal-structure">Analysis 1 - Longitudinal Structure</a></li>
   <li><a href="#analysis-2---candidate-scale-scores" id="toc-analysis-2---candidate-scale-scores" class="nav-link" data-scroll-target="#analysis-2---candidate-scale-scores">Analysis 2 - Candidate Scale Scores</a></li>
+  <li><a href="#analysis-3---core-scale-panel" id="toc-analysis-3---core-scale-panel" class="nav-link" data-scroll-target="#analysis-3---core-scale-panel">Analysis 3 - Core Scale Panel</a></li>
+  <li><a href="#analysis-4---scale-coverage-by-time-point" id="toc-analysis-4---scale-coverage-by-time-point" class="nav-link" data-scroll-target="#analysis-4---scale-coverage-by-time-point">Analysis 4 - Scale Coverage by Time Point</a></li>
   <li><a href="#candidate-psychological-constructs" id="toc-candidate-psychological-constructs" class="nav-link" data-scroll-target="#candidate-psychological-constructs">Candidate Psychological Constructs</a></li>
   <li><a href="#next-modeling-plan" id="toc-next-modeling-plan" class="nav-link" data-scroll-target="#next-modeling-plan">Next Modeling Plan</a></li>
   </ul>
@@ -2243,7 +2245,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">June 6, 2026</p>
+      <p class="date">June 8, 2026</p>
     </div>
   </div>
   
@@ -2804,24 +2806,267 @@ jswc_SUM_tp4                       0.04761905</code></pre>
 </div>
 <p><strong>Interpretation guide:</strong> These columns are candidates, not final constructs. We will use the codebook to decide which score should become the primary outcome, such as perceived stress, burnout, depressive symptoms, job satisfaction, or teacher stress.</p>
 </section>
+<section id="analysis-3---core-scale-panel" class="level2">
+<h2 class="anchored" data-anchor-id="analysis-3---core-scale-panel">Analysis 3 - Core Scale Panel</h2>
+<p>This kernel builds the first reduced longitudinal analysis table. The goal is not yet to fit a model, but to create a person-time panel with the most promising psychological scale scores. Because the raw files use different column names across time points, each construct is harmonized manually.</p>
+<p>The cleaning step converts special missing-value codes such as <code>-999</code>, <code>-99</code>, and <code>-9</code> into real <code>NA</code> values. This matters because those codes would otherwise distort means, ranges, correlations, and Bayesian model estimates.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>clean_missing_codes <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  x <span class="ot">&lt;-</span> <span class="fu">suppressWarnings</span>(<span class="fu">as.numeric</span>(x))</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  x[x <span class="sc">%in%</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">999</span>, <span class="sc">-</span><span class="dv">99</span>, <span class="sc">-</span><span class="dv">9</span>)] <span class="ot">&lt;-</span> <span class="cn">NA_real_</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>  x</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>pick_col <span class="ot">&lt;-</span> <span class="cf">function</span>(dat, candidates) {</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>  found <span class="ot">&lt;-</span> candidates[candidates <span class="sc">%in%</span> <span class="fu">names</span>(dat)]</span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(found) <span class="sc">==</span> <span class="dv">0</span>) {</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">rep</span>(<span class="cn">NA_real_</span>, <span class="fu">nrow</span>(dat)))</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">clean_missing_codes</span>(dat[[found[<span class="dv">1</span>]]])</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>core_scale_panel <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">StudyID =</span> <span class="fu">as.character</span>(timepoint_data<span class="sc">$</span>tp1<span class="sc">$</span>StudyID),</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_point =</span> <span class="st">&quot;tp1&quot;</span>,</span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">perceived_stress =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp1, <span class="fu">c</span>(<span class="st">&quot;PSIsumTp1&quot;</span>)),</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">teacher_stress =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp1, <span class="fu">c</span>(<span class="st">&quot;TSI_mean&quot;</span>)),</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">burnout_emotional_exhaustion =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp1, <span class="fu">c</span>(<span class="st">&quot;Burn_EEav&quot;</span>)),</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">depressive_symptoms =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp1, <span class="fu">c</span>(<span class="st">&quot;CESDsum_tp1&quot;</span>)),</span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">anxiety =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp1, <span class="fu">c</span>(<span class="st">&quot;GA_TotalTp1&quot;</span>)),</span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">self_efficacy =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp1, <span class="fu">c</span>(<span class="st">&quot;TBSE_totalav&quot;</span>)),</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">job_satisfaction_work =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp1, <span class="fu">c</span>(<span class="st">&quot;JS_my_work_SUM_tp1&quot;</span>))</span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(</span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">StudyID =</span> <span class="fu">as.character</span>(timepoint_data<span class="sc">$</span>tp2<span class="sc">$</span>StudyID),</span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_point =</span> <span class="st">&quot;tp2&quot;</span>,</span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">perceived_stress =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp2, <span class="fu">c</span>(<span class="st">&quot;PSIsum_tp2&quot;</span>)),</span>
+<span id="cb16-33"><a href="#cb16-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">teacher_stress =</span> <span class="cn">NA_real_</span>,</span>
+<span id="cb16-34"><a href="#cb16-34" aria-hidden="true" tabindex="-1"></a>    <span class="at">burnout_emotional_exhaustion =</span> <span class="cn">NA_real_</span>,</span>
+<span id="cb16-35"><a href="#cb16-35" aria-hidden="true" tabindex="-1"></a>    <span class="at">depressive_symptoms =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp2, <span class="fu">c</span>(<span class="st">&quot;CESDsum_tp2&quot;</span>)),</span>
+<span id="cb16-36"><a href="#cb16-36" aria-hidden="true" tabindex="-1"></a>    <span class="at">anxiety =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp2, <span class="fu">c</span>(<span class="st">&quot;GA_Total_tp2&quot;</span>)),</span>
+<span id="cb16-37"><a href="#cb16-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">self_efficacy =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp2, <span class="fu">c</span>(<span class="st">&quot;gsE_sum_tp2&quot;</span>)),</span>
+<span id="cb16-38"><a href="#cb16-38" aria-hidden="true" tabindex="-1"></a>    <span class="at">job_satisfaction_work =</span> <span class="cn">NA_real_</span></span>
+<span id="cb16-39"><a href="#cb16-39" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb16-40"><a href="#cb16-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(</span>
+<span id="cb16-41"><a href="#cb16-41" aria-hidden="true" tabindex="-1"></a>    <span class="at">StudyID =</span> <span class="fu">as.character</span>(timepoint_data<span class="sc">$</span>tp3<span class="sc">$</span>StudyID),</span>
+<span id="cb16-42"><a href="#cb16-42" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_point =</span> <span class="st">&quot;tp3&quot;</span>,</span>
+<span id="cb16-43"><a href="#cb16-43" aria-hidden="true" tabindex="-1"></a>    <span class="at">perceived_stress =</span> <span class="cn">NA_real_</span>,</span>
+<span id="cb16-44"><a href="#cb16-44" aria-hidden="true" tabindex="-1"></a>    <span class="at">teacher_stress =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp3, <span class="fu">c</span>(<span class="st">&quot;TSI_mean_tp3&quot;</span>)),</span>
+<span id="cb16-45"><a href="#cb16-45" aria-hidden="true" tabindex="-1"></a>    <span class="at">burnout_emotional_exhaustion =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp3, <span class="fu">c</span>(<span class="st">&quot;Burn_EEav_tp3&quot;</span>)),</span>
+<span id="cb16-46"><a href="#cb16-46" aria-hidden="true" tabindex="-1"></a>    <span class="at">depressive_symptoms =</span> <span class="cn">NA_real_</span>,</span>
+<span id="cb16-47"><a href="#cb16-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">anxiety =</span> <span class="cn">NA_real_</span>,</span>
+<span id="cb16-48"><a href="#cb16-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">self_efficacy =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp3, <span class="fu">c</span>(<span class="st">&quot;TBSE_totalav_tp3&quot;</span>)),</span>
+<span id="cb16-49"><a href="#cb16-49" aria-hidden="true" tabindex="-1"></a>    <span class="at">job_satisfaction_work =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp3, <span class="fu">c</span>(<span class="st">&quot;js_my_work_SUM_tp3&quot;</span>))</span>
+<span id="cb16-50"><a href="#cb16-50" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb16-51"><a href="#cb16-51" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(</span>
+<span id="cb16-52"><a href="#cb16-52" aria-hidden="true" tabindex="-1"></a>    <span class="at">StudyID =</span> <span class="fu">as.character</span>(timepoint_data<span class="sc">$</span>tp4<span class="sc">$</span>StudyID),</span>
+<span id="cb16-53"><a href="#cb16-53" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_point =</span> <span class="st">&quot;tp4&quot;</span>,</span>
+<span id="cb16-54"><a href="#cb16-54" aria-hidden="true" tabindex="-1"></a>    <span class="at">perceived_stress =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp4, <span class="fu">c</span>(<span class="st">&quot;PSIsum_TP4&quot;</span>)),</span>
+<span id="cb16-55"><a href="#cb16-55" aria-hidden="true" tabindex="-1"></a>    <span class="at">teacher_stress =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp4, <span class="fu">c</span>(<span class="st">&quot;TSI_mean_tp4&quot;</span>)),</span>
+<span id="cb16-56"><a href="#cb16-56" aria-hidden="true" tabindex="-1"></a>    <span class="at">burnout_emotional_exhaustion =</span> <span class="cn">NA_real_</span>,</span>
+<span id="cb16-57"><a href="#cb16-57" aria-hidden="true" tabindex="-1"></a>    <span class="at">depressive_symptoms =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp4, <span class="fu">c</span>(<span class="st">&quot;CESDsum_tp4&quot;</span>)),</span>
+<span id="cb16-58"><a href="#cb16-58" aria-hidden="true" tabindex="-1"></a>    <span class="at">anxiety =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp4, <span class="fu">c</span>(<span class="st">&quot;GA_Total&quot;</span>)),</span>
+<span id="cb16-59"><a href="#cb16-59" aria-hidden="true" tabindex="-1"></a>    <span class="at">self_efficacy =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp4, <span class="fu">c</span>(<span class="st">&quot;TBSE_totalav_tp4&quot;</span>)),</span>
+<span id="cb16-60"><a href="#cb16-60" aria-hidden="true" tabindex="-1"></a>    <span class="at">job_satisfaction_work =</span> <span class="fu">pick_col</span>(timepoint_data<span class="sc">$</span>tp4, <span class="fu">c</span>(<span class="st">&quot;js_my_work_SUM_tp4&quot;</span>))</span>
+<span id="cb16-61"><a href="#cb16-61" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb16-62"><a href="#cb16-62" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb16-63"><a href="#cb16-63" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb16-64"><a href="#cb16-64" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_point =</span> <span class="fu">factor</span>(time_point, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">&quot;tp1&quot;</span>, <span class="st">&quot;tp2&quot;</span>, <span class="st">&quot;tp3&quot;</span>, <span class="st">&quot;tp4&quot;</span>)),</span>
+<span id="cb16-65"><a href="#cb16-65" aria-hidden="true" tabindex="-1"></a>    <span class="at">time_index =</span> <span class="fu">as.integer</span>(time_point)</span>
+<span id="cb16-66"><a href="#cb16-66" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb16-67"><a href="#cb16-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-68"><a href="#cb16-68" aria-hidden="true" tabindex="-1"></a>core_scale_panel <span class="sc">|&gt;</span></span>
+<span id="cb16-69"><a href="#cb16-69" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb16-70"><a href="#cb16-70" aria-hidden="true" tabindex="-1"></a>    <span class="at">rows =</span> <span class="fu">n</span>(),</span>
+<span id="cb16-71"><a href="#cb16-71" aria-hidden="true" tabindex="-1"></a>    <span class="at">educators =</span> <span class="fu">n_distinct</span>(StudyID),</span>
+<span id="cb16-72"><a href="#cb16-72" aria-hidden="true" tabindex="-1"></a>    <span class="fu">across</span>(</span>
+<span id="cb16-73"><a href="#cb16-73" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(</span>
+<span id="cb16-74"><a href="#cb16-74" aria-hidden="true" tabindex="-1"></a>        perceived_stress,</span>
+<span id="cb16-75"><a href="#cb16-75" aria-hidden="true" tabindex="-1"></a>        teacher_stress,</span>
+<span id="cb16-76"><a href="#cb16-76" aria-hidden="true" tabindex="-1"></a>        burnout_emotional_exhaustion,</span>
+<span id="cb16-77"><a href="#cb16-77" aria-hidden="true" tabindex="-1"></a>        depressive_symptoms,</span>
+<span id="cb16-78"><a href="#cb16-78" aria-hidden="true" tabindex="-1"></a>        anxiety,</span>
+<span id="cb16-79"><a href="#cb16-79" aria-hidden="true" tabindex="-1"></a>        self_efficacy,</span>
+<span id="cb16-80"><a href="#cb16-80" aria-hidden="true" tabindex="-1"></a>        job_satisfaction_work</span>
+<span id="cb16-81"><a href="#cb16-81" aria-hidden="true" tabindex="-1"></a>      ),</span>
+<span id="cb16-82"><a href="#cb16-82" aria-hidden="true" tabindex="-1"></a>      <span class="sc">~</span> <span class="fu">sum</span>(<span class="sc">!</span><span class="fu">is.na</span>(.x)),</span>
+<span id="cb16-83"><a href="#cb16-83" aria-hidden="true" tabindex="-1"></a>      <span class="at">.names =</span> <span class="st">&quot;n_{.col}&quot;</span></span>
+<span id="cb16-84"><a href="#cb16-84" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb16-85"><a href="#cb16-85" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>  rows educators n_perceived_stress n_teacher_stress
+1  207        67                154              148
+  n_burnout_emotional_exhaustion n_depressive_symptoms n_anxiety
+1                            105                   153       153
+  n_self_efficacy n_job_satisfaction_work
+1             200                     142</code></pre>
+</div>
+</div>
+<p><strong>Interpretation guide:</strong> The counts show which constructs have enough observed values for modeling. A construct measured in several waves can support longitudinal modeling. A construct measured only once is better treated as a baseline predictor or descriptive endpoint.</p>
+</section>
+<section id="analysis-4---scale-coverage-by-time-point" class="level2">
+<h2 class="anchored" data-anchor-id="analysis-4---scale-coverage-by-time-point">Analysis 4 - Scale Coverage by Time Point</h2>
+<p>The previous kernel showed total coverage across all waves. This kernel breaks coverage down by time point. This matters because a variable can have a high total count but still be unavailable in key waves. For longitudinal Bayesian modeling, the best outcome is usually a construct measured repeatedly across several time points.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>scale_coverage_by_time <span class="ot">&lt;-</span> core_scale_panel <span class="sc">|&gt;</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(time_point) <span class="sc">|&gt;</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">rows =</span> <span class="fu">n</span>(),</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">educators =</span> <span class="fu">n_distinct</span>(StudyID),</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">across</span>(</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>        perceived_stress,</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>        teacher_stress,</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>        burnout_emotional_exhaustion,</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>        depressive_symptoms,</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>        anxiety,</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>        self_efficacy,</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>        job_satisfaction_work</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>      ),</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>      <span class="sc">~</span> <span class="fu">sum</span>(<span class="sc">!</span><span class="fu">is.na</span>(.x)),</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>      <span class="at">.names =</span> <span class="st">&quot;n_{.col}&quot;</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">.groups =</span> <span class="st">&quot;drop&quot;</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>scale_coverage_by_time</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 4 × 10
+  time_point  rows educators n_perceived_stress n_teacher_stress
+  &lt;fct&gt;      &lt;int&gt;     &lt;int&gt;              &lt;int&gt;            &lt;int&gt;
+1 tp1           67        67                 61               62
+2 tp2           53        53                 53                0
+3 tp3           45        45                  0               45
+4 tp4           42        42                 40               41
+# ℹ 5 more variables: n_burnout_emotional_exhaustion &lt;int&gt;,
+#   n_depressive_symptoms &lt;int&gt;, n_anxiety &lt;int&gt;, n_self_efficacy &lt;int&gt;,
+#   n_job_satisfaction_work &lt;int&gt;</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>scale_distribution_summary <span class="ot">&lt;-</span> core_scale_panel <span class="sc">|&gt;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">across</span>(</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>        perceived_stress,</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>        teacher_stress,</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>        burnout_emotional_exhaustion,</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>        depressive_symptoms,</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>        anxiety,</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>        self_efficacy,</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>        job_satisfaction_work</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>      ),</span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>      <span class="fu">list</span>(</span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>        <span class="at">n =</span> <span class="sc">~</span> <span class="fu">sum</span>(<span class="sc">!</span><span class="fu">is.na</span>(.x)),</span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>        <span class="at">mean =</span> <span class="sc">~</span> <span class="fu">mean</span>(.x, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>        <span class="at">sd =</span> <span class="sc">~</span> <span class="fu">sd</span>(.x, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>        <span class="at">min =</span> <span class="sc">~</span> <span class="fu">min</span>(.x, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>        <span class="at">max =</span> <span class="sc">~</span> <span class="fu">max</span>(.x, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>      ),</span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>      <span class="at">.names =</span> <span class="st">&quot;{.col}_{.fn}&quot;</span></span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a>scale_distribution_summary</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>  perceived_stress_n perceived_stress_mean perceived_stress_sd
+1                154                    20             6.96396
+  perceived_stress_min perceived_stress_max teacher_stress_n
+1                    4                   34              148
+  teacher_stress_mean teacher_stress_sd teacher_stress_min teacher_stress_max
+1            15.92107          6.517902           1.441667           35.03333
+  burnout_emotional_exhaustion_n burnout_emotional_exhaustion_mean
+1                            105                          3.017063
+  burnout_emotional_exhaustion_sd burnout_emotional_exhaustion_min
+1                        1.505913                                0
+  burnout_emotional_exhaustion_max depressive_symptoms_n
+1                         5.888889                   153
+  depressive_symptoms_mean depressive_symptoms_sd depressive_symptoms_min
+1                 19.29412               11.52108                       1
+  depressive_symptoms_max anxiety_n anxiety_mean anxiety_sd anxiety_min
+1                      46       153     7.679739   5.657614           0
+  anxiety_max self_efficacy_n self_efficacy_mean self_efficacy_sd
+1          21             200           14.46167         6.592933
+  self_efficacy_min self_efficacy_max job_satisfaction_work_n
+1        0.08333333                29                     142
+  job_satisfaction_work_mean job_satisfaction_work_sd job_satisfaction_work_min
+1                   26.19014                   5.0289                        12
+  job_satisfaction_work_max
+1                        39</code></pre>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>core_scale_long <span class="ot">&lt;-</span> core_scale_panel <span class="sc">|&gt;</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>  tidyr<span class="sc">::</span><span class="fu">pivot_longer</span>(</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">cols =</span> <span class="fu">c</span>(</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>      perceived_stress,</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>      teacher_stress,</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>      burnout_emotional_exhaustion,</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>      depressive_symptoms,</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>      anxiety,</span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>      self_efficacy,</span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>      job_satisfaction_work</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">names_to =</span> <span class="st">&quot;construct&quot;</span>,</span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">values_to =</span> <span class="st">&quot;value&quot;</span></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(value))</span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>core_scale_long <span class="sc">|&gt;</span></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">count</span>(construct, time_point) <span class="sc">|&gt;</span></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(construct, time_point)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 21 × 3
+   construct                    time_point     n
+   &lt;chr&gt;                        &lt;fct&gt;      &lt;int&gt;
+ 1 anxiety                      tp1           61
+ 2 anxiety                      tp2           53
+ 3 anxiety                      tp4           39
+ 4 burnout_emotional_exhaustion tp1           60
+ 5 burnout_emotional_exhaustion tp3           45
+ 6 depressive_symptoms          tp1           60
+ 7 depressive_symptoms          tp2           53
+ 8 depressive_symptoms          tp4           40
+ 9 job_satisfaction_work        tp1           60
+10 job_satisfaction_work        tp3           43
+# ℹ 11 more rows</code></pre>
+</div>
+</div>
+<p><strong>Interpretation guide:</strong> A strong first outcome should have repeated coverage across at least three waves, a sensible numeric range, and no remaining special missing codes. If two outcomes are plausible, we will prefer the one that best matches the project’s psychological question.</p>
+</section>
 <section id="candidate-psychological-constructs" class="level2">
 <h2 class="anchored" data-anchor-id="candidate-psychological-constructs">Candidate Psychological Constructs</h2>
 <p>This first pass searches column names for likely stress, demand, resource, well-being, and educator identifiers. These candidates will be verified against the codebook before modeling.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>candidate_patterns <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;stress&quot;</span>, <span class="st">&quot;burn&quot;</span>, <span class="st">&quot;well&quot;</span>, <span class="st">&quot;demand&quot;</span>, <span class="st">&quot;resource&quot;</span>, <span class="st">&quot;support&quot;</span>,</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;depress&quot;</span>, <span class="st">&quot;anx&quot;</span>, <span class="st">&quot;effic&quot;</span>, <span class="st">&quot;satisf&quot;</span>, <span class="st">&quot;job&quot;</span>, <span class="st">&quot;work&quot;</span>, <span class="st">&quot;teacher&quot;</span>,</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;center&quot;</span>, <span class="st">&quot;site&quot;</span>, <span class="st">&quot;id&quot;</span></span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>candidates <span class="ot">&lt;-</span> <span class="fu">find_candidate_columns</span>(column_inventory, candidate_patterns)</span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>candidates <span class="sc">|&gt;</span></span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(file, column) <span class="sc">|&gt;</span></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, column, missing_rate) <span class="sc">|&gt;</span></span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">head</span>(<span class="dv">80</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>candidate_patterns <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;stress&quot;</span>, <span class="st">&quot;burn&quot;</span>, <span class="st">&quot;well&quot;</span>, <span class="st">&quot;demand&quot;</span>, <span class="st">&quot;resource&quot;</span>, <span class="st">&quot;support&quot;</span>,</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;depress&quot;</span>, <span class="st">&quot;anx&quot;</span>, <span class="st">&quot;effic&quot;</span>, <span class="st">&quot;satisf&quot;</span>, <span class="st">&quot;job&quot;</span>, <span class="st">&quot;work&quot;</span>, <span class="st">&quot;teacher&quot;</span>,</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;center&quot;</span>, <span class="st">&quot;site&quot;</span>, <span class="st">&quot;id&quot;</span></span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>candidates <span class="ot">&lt;-</span> <span class="fu">find_candidate_columns</span>(column_inventory, candidate_patterns)</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>candidates <span class="sc">|&gt;</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(file, column) <span class="sc">|&gt;</span></span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, column, missing_rate) <span class="sc">|&gt;</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">head</span>(<span class="dv">80</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>                                        file               column missing_rate
