@@ -296,9 +296,931 @@ candidates |>
   head(80)
 ```
 
+## Analysis 5 - Modeling Readiness
+
+At this point, the project has enough structure to choose a first modeling target. For the first Bayesian model, the outcome should be repeatedly observed, psychologically central to the research question, and numerically well-behaved.
+
+The strongest initial outcome candidate is `perceived_stress`, because it is observed at TP1, TP2, and TP4. `self_efficacy` is screened as a possible resource-like predictor, but its wave-to-wave scale behavior must be checked before treating it as a longitudinal construct.
+
+```{r analysis-5-construct-readiness}
+construct_readiness <- core_scale_long |>
+  group_by(construct) |>
+  summarise(
+    observations = n(),
+    educators = n_distinct(StudyID),
+    time_points_observed = n_distinct(time_point),
+    first_time_point = min(as.character(time_point)),
+    last_time_point = max(as.character(time_point)),
+    mean = mean(value),
+    sd = sd(value),
+    min = min(value),
+    max = max(value),
+    .groups = "drop"
+  ) |>
+  arrange(desc(time_points_observed), desc(observations))
+
+construct_readiness
+```
+
+```{r analysis-5-stress-model-data}
+standardize_numeric <- function(x) {
+  as.numeric((x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE))
+}
+
+standardize_within_time <- function(x, time_point) {
+  ave(
+    x,
+    time_point,
+    FUN = function(v) as.numeric((v - mean(v, na.rm = TRUE)) / sd(v, na.rm = TRUE))
+  )
+}
+
+stress_model_data <- core_scale_panel |>
+  filter(
+    !is.na(perceived_stress),
+    !is.na(self_efficacy)
+  ) |>
+  mutate(
+    time_point = droplevels(time_point),
+    perceived_stress_z = standardize_numeric(perceived_stress),
+    self_efficacy_z = standardize_numeric(self_efficacy),
+    perceived_stress_wave_z = standardize_within_time(perceived_stress, time_point),
+    self_efficacy_wave_z = standardize_within_time(self_efficacy, time_point),
+    time_index_z = standardize_numeric(time_index)
+  )
+
+stress_model_summary <- stress_model_data |>
+  summarise(
+    observations = n(),
+    educators = n_distinct(StudyID),
+    time_points = n_distinct(time_point),
+    educators_with_repeated_observations = sum(
+      table(StudyID) > 1
+    ),
+    mean_observations_per_educator = observations / educators
+  )
+
+stress_model_summary
+```
+
+```{r analysis-5-observations-per-educator}
+stress_model_data |>
+  count(StudyID, name = "observations") |>
+  count(observations, name = "educators") |>
+  arrange(observations)
+```
+
+```{r analysis-5-stress-by-time}
+stress_by_time <- stress_model_data |>
+  group_by(time_point) |>
+  summarise(
+    observations = n(),
+    educators = n_distinct(StudyID),
+    mean_perceived_stress = mean(perceived_stress),
+    sd_perceived_stress = sd(perceived_stress),
+    mean_self_efficacy = mean(self_efficacy),
+    sd_self_efficacy = sd(self_efficacy),
+    .groups = "drop"
+  )
+
+stress_by_time
+```
+
+```{r analysis-5-stress-distribution-plot}
+ggplot(stress_model_data, aes(x = perceived_stress)) +
+  geom_histogram(bins = 18, color = "white", fill = "#3b6ea8") +
+  facet_wrap(~ time_point, nrow = 1) +
+  labs(
+    title = "Perceived stress distribution by time point",
+    x = "Perceived stress score",
+    y = "Educator observations"
+  ) +
+  theme_minimal()
+```
+
+```{r analysis-5-self-efficacy-stress-plot}
+ggplot(
+  stress_model_data,
+  aes(x = self_efficacy_wave_z, y = perceived_stress_wave_z)
+) +
+  geom_point(alpha = 0.7, color = "#374151") +
+  geom_smooth(method = "lm", se = TRUE, color = "#b35c2e") +
+  facet_wrap(~ time_point, nrow = 1) +
+  labs(
+    title = "Within-wave standardized self-efficacy and perceived stress",
+    x = "Self-efficacy, standardized within time point",
+    y = "Perceived stress, standardized within time point"
+  ) +
+  theme_minimal()
+```
+
+**Interpretation guide:** The repeated-observation table tells us whether we should include a varying educator intercept, written as `(1 | StudyID)` in `brms`. The self-efficacy plot is standardized within wave because the raw means differ sharply across time points; this protects the exploratory visualization from mixing scale differences with psychological differences.
+
+## Analysis 6 - First Bayesian Hierarchical Model
+
+The first Bayesian model estimates average change in perceived stress across time while allowing each educator to have their own baseline stress level. This is a conservative starting point: it uses the strongest repeated outcome and avoids adding predictors whose scale equivalence still needs verification.
+
+Model formula:
+
+```text
+perceived_stress_z ~ time_index_z + (1 | StudyID)
+```
+
+```{r analysis-6-model-package-check}
+model_package_status <- check_model_packages()
+model_package_status
+```
+
+```{r analysis-6-fit-stress-time-model}
+if (!requireNamespace("brms", quietly = TRUE)) {
+  stress_time_model <- NULL
+  message("brms is not installed. Install brms before fitting the Bayesian model.")
+} else {
+  library(brms)
+
+  dir.create("models", showWarnings = FALSE)
+  stress_time_model_path <- "models/stress_time_model.rds"
+
+  stress_time_priors <- c(
+    prior(normal(0, 0.5), class = "b"),
+    prior(normal(0, 1), class = "Intercept"),
+    prior(exponential(1), class = "sd"),
+    prior(exponential(1), class = "sigma")
+  )
+
+  if (file.exists(stress_time_model_path)) {
+    stress_time_model <- readRDS(stress_time_model_path)
+    message("Loaded saved model from: ", stress_time_model_path)
+  } else if (
+    exists("stress_time_model") &&
+      inherits(stress_time_model, "brmsfit")
+  ) {
+    saveRDS(stress_time_model, stress_time_model_path)
+    message("Saved existing model to: ", stress_time_model_path)
+  } else {
+    stress_time_model <- brm(
+      perceived_stress_z ~ time_index_z + (1 | StudyID),
+      data = stress_model_data,
+      family = gaussian(),
+      prior = stress_time_priors,
+      chains = 4,
+      iter = 2000,
+      warmup = 1000,
+      seed = 20260610,
+      control = list(adapt_delta = 0.95)
+    )
+
+    saveRDS(stress_time_model, stress_time_model_path)
+    message("Saved model to: ", stress_time_model_path)
+  }
+}
+```
+
+```{r analysis-6-model-summary}
+if (!is.null(stress_time_model)) {
+  summary(stress_time_model)
+}
+```
+
+```{r analysis-6-posterior-intervals}
+if (!is.null(stress_time_model)) {
+  posterior::summarise_draws(
+    posterior::as_draws_df(stress_time_model),
+    mean = mean,
+    median = median,
+    sd = sd,
+    q025 = ~ quantile(.x, probs = 0.025),
+    q975 = ~ quantile(.x, probs = 0.975)
+  ) |>
+    filter(
+      variable %in% c(
+        "b_Intercept",
+        "b_time_index_z",
+        "sd_StudyID__Intercept",
+        "sigma"
+      )
+    )
+}
+```
+
+```{r analysis-6-posterior-check}
+if (!is.null(stress_time_model)) {
+  pp_check(stress_time_model, ndraws = 100) +
+    ggplot2::labs(
+      title = "Posterior predictive check for perceived stress model"
+    )
+}
+```
+
+```{r analysis-6-time-effect-posterior}
+if (!is.null(stress_time_model)) {
+  stress_time_draws <- posterior::as_draws_df(stress_time_model)
+
+  ggplot(stress_time_draws, aes(x = b_time_index_z)) +
+    geom_density(fill = "#3b6ea8", alpha = 0.35, color = "#1f2937") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "#991b1b") +
+    labs(
+      title = "Posterior distribution of the average time trend",
+      x = "Effect of time on perceived stress (standardized units)",
+      y = "Posterior density"
+    ) +
+    theme_minimal()
+}
+```
+
+```{r analysis-6-time-effect-probabilities}
+if (!is.null(stress_time_model)) {
+  stress_time_draws |>
+    summarise(
+      probability_time_effect_below_zero = mean(b_time_index_z < 0),
+      probability_time_effect_below_minus_point_10 = mean(b_time_index_z < -0.10),
+      probability_time_effect_above_zero = mean(b_time_index_z > 0)
+    )
+}
+```
+
+```{r analysis-6-predicted-stress-by-time}
+if (!is.null(stress_time_model)) {
+  prediction_grid <- data.frame(
+    time_point = factor(c("tp1", "tp2", "tp4"), levels = levels(stress_model_data$time_point)),
+    time_index = c(1, 2, 4)
+  ) |>
+    mutate(
+      time_index_z = as.numeric(
+        (time_index - mean(stress_model_data$time_index)) / sd(stress_model_data$time_index)
+      )
+    )
+
+  predicted_stress_by_time <- fitted(
+    stress_time_model,
+    newdata = prediction_grid,
+    re_formula = NA,
+    summary = TRUE,
+    probs = c(0.025, 0.975)
+  ) |>
+    as.data.frame() |>
+    bind_cols(prediction_grid)
+
+  predicted_stress_by_time
+}
+```
+
+```{r analysis-6-predicted-stress-plot}
+if (!is.null(stress_time_model)) {
+  ggplot(
+    predicted_stress_by_time,
+    aes(x = time_point, y = Estimate, group = 1)
+  ) +
+    geom_line(color = "#1f2937", linewidth = 0.8) +
+    geom_errorbar(
+      aes(ymin = Q2.5, ymax = Q97.5),
+      width = 0.08,
+      color = "#3b6ea8",
+      linewidth = 0.7
+    ) +
+    geom_point(size = 2.5, color = "#1f2937") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "#6b7280") +
+    labs(
+      title = "Estimated average perceived stress by time point",
+      x = "Time point",
+      y = "Expected perceived stress (standardized)"
+    ) +
+    theme_minimal()
+}
+```
+
+```{r analysis-6-educator-variation}
+if (!is.null(stress_time_model)) {
+  educator_intercepts <- ranef(stress_time_model)$StudyID[, , "Intercept"] |>
+    as.data.frame() |>
+    tibble::rownames_to_column("StudyID") |>
+    arrange(Estimate)
+
+  educator_intercepts |>
+    summarise(
+      educators = n(),
+      lowest_estimated_deviation = min(Estimate),
+      highest_estimated_deviation = max(Estimate),
+      median_estimated_deviation = median(Estimate)
+    )
+}
+```
+
+```{r analysis-6-educator-variation-plot}
+if (!is.null(stress_time_model)) {
+  educator_intercepts |>
+    mutate(educator_rank = row_number()) |>
+    ggplot(aes(x = educator_rank, y = Estimate)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "#6b7280") +
+    geom_pointrange(
+      aes(ymin = Q2.5, ymax = Q97.5),
+      color = "#374151",
+      alpha = 0.75
+    ) +
+    labs(
+      title = "Educator-level deviations in baseline perceived stress",
+      x = "Educators ranked by estimated baseline stress",
+      y = "Deviation from average baseline stress"
+    ) +
+    theme_minimal()
+}
+```
+
+```{r analysis-6-icc}
+if (!is.null(stress_time_model)) {
+  model_1_variance_draws <- stress_time_draws |>
+    transmute(
+      educator_variance = sd_StudyID__Intercept^2,
+      residual_variance = sigma^2,
+      total_variance = educator_variance + residual_variance,
+      icc = educator_variance / total_variance
+    )
+
+  model_1_icc_summary <- model_1_variance_draws |>
+    summarise(
+      mean_icc = mean(icc),
+      median_icc = median(icc),
+      q025_icc = quantile(icc, probs = 0.025),
+      q975_icc = quantile(icc, probs = 0.975),
+      probability_icc_above_point_50 = mean(icc > 0.50),
+      probability_icc_above_point_60 = mean(icc > 0.60)
+    )
+
+  model_1_icc_summary
+}
+```
+
+```{r analysis-6-icc-plot}
+if (!is.null(stress_time_model)) {
+  ggplot(model_1_variance_draws, aes(x = icc)) +
+    geom_density(fill = "#3b6ea8", alpha = 0.35, color = "#1f2937") +
+    geom_vline(xintercept = 0.50, linetype = "dashed", color = "#991b1b") +
+    labs(
+      title = "Posterior distribution of the intraclass correlation",
+      x = "ICC: proportion of variance attributable to educator differences",
+      y = "Posterior density"
+    ) +
+    theme_minimal()
+}
+```
+
+### Model 1 Interpretation
+
+The first hierarchical Bayesian model suggests a small average decline in perceived stress across the observed waves. The posterior probability that the time trend is negative is high, but the estimated magnitude is modest. This means the evidence points more toward a small decrease than toward a large longitudinal shift.
+
+The strongest result is the educator-level heterogeneity. The posterior distribution of the intraclass correlation quantifies how much of the modeled variation in perceived stress is attributable to stable differences between educators rather than residual observation-level variation. A high ICC supports the use of a hierarchical model because observations from the same educator are not interchangeable with observations from different educators.
+
+Substantively, Model 1 suggests that perceived stress is shaped less by a large average time trend and more by persistent individual differences between educators. The next models should therefore preserve the educator-level structure while testing whether job demands, resources, or other validated predictors explain some of those between-educator differences.
+
+**Interpretation guide:** `b_time_index_z` is the estimated average time trend in perceived stress, in standard deviation units. If most of its posterior mass is below zero, perceived stress tends to decrease across observed waves. `sd_StudyID__Intercept` tells us how much educators differ in their baseline stress after accounting for time. The educator-level plot shows partial pooling: individual estimates are pulled toward the group average when each educator has limited data. The ICC converts the variance components into a proportion, making the clustering by educator easier to interpret.
+
+## Analysis 7 - Time as a Categorical Predictor
+
+Model 1 treated time as a linear trend. Model 2 treats each observed wave as its own category, using TP1 as the reference point. This lets the model estimate whether TP2 and TP4 differ from TP1 without assuming that the change must follow a straight line.
+
+Model formula:
+
+```text
+perceived_stress_z ~ time_point + (1 | StudyID)
+```
+
+```{r analysis-7-fit-time-categorical-model}
+if (!requireNamespace("brms", quietly = TRUE)) {
+  stress_time_categorical_model <- NULL
+  message("brms is not installed. Install brms before fitting the Bayesian model.")
+} else {
+  library(brms)
+
+  dir.create("models", showWarnings = FALSE)
+  stress_time_categorical_model_path <- "models/stress_time_categorical_model.rds"
+
+  stress_time_categorical_priors <- c(
+    prior(normal(0, 0.5), class = "b"),
+    prior(normal(0, 1), class = "Intercept"),
+    prior(exponential(1), class = "sd"),
+    prior(exponential(1), class = "sigma")
+  )
+
+  if (file.exists(stress_time_categorical_model_path)) {
+    stress_time_categorical_model <- readRDS(stress_time_categorical_model_path)
+    message("Loaded saved model from: ", stress_time_categorical_model_path)
+  } else if (
+    exists("stress_time_categorical_model") &&
+      inherits(stress_time_categorical_model, "brmsfit")
+  ) {
+    saveRDS(stress_time_categorical_model, stress_time_categorical_model_path)
+    message("Saved existing model to: ", stress_time_categorical_model_path)
+  } else {
+    stress_time_categorical_model <- brm(
+      perceived_stress_z ~ time_point + (1 | StudyID),
+      data = stress_model_data,
+      family = gaussian(),
+      prior = stress_time_categorical_priors,
+      chains = 4,
+      iter = 2000,
+      warmup = 1000,
+      seed = 20260610,
+      control = list(adapt_delta = 0.95)
+    )
+
+    saveRDS(stress_time_categorical_model, stress_time_categorical_model_path)
+    message("Saved model to: ", stress_time_categorical_model_path)
+  }
+}
+```
+
+```{r analysis-7-model-summary}
+if (!is.null(stress_time_categorical_model)) {
+  summary(stress_time_categorical_model)
+}
+```
+
+```{r analysis-7-time-contrast-probabilities}
+if (!is.null(stress_time_categorical_model)) {
+  stress_time_categorical_draws <- posterior::as_draws_df(stress_time_categorical_model)
+
+  data.frame(
+    contrast = c(
+      "TP2 lower than TP1",
+      "TP4 lower than TP1",
+      "TP4 lower than TP2",
+      "TP4 at least 0.10 SD lower than TP1"
+    ),
+    posterior_probability = c(
+      mean(stress_time_categorical_draws$b_time_pointtp2 < 0),
+      mean(stress_time_categorical_draws$b_time_pointtp4 < 0),
+      mean(stress_time_categorical_draws$b_time_pointtp4 < stress_time_categorical_draws$b_time_pointtp2),
+      mean(stress_time_categorical_draws$b_time_pointtp4 < -0.10)
+    )
+  )
+}
+```
+
+```{r analysis-7-predicted-stress-by-time}
+if (!is.null(stress_time_categorical_model)) {
+  categorical_prediction_grid <- data.frame(
+    time_point = factor(c("tp1", "tp2", "tp4"), levels = c("tp1", "tp2", "tp4"))
+  )
+
+  categorical_predicted_stress_by_time <- fitted(
+    stress_time_categorical_model,
+    newdata = categorical_prediction_grid,
+    re_formula = NA,
+    summary = TRUE,
+    probs = c(0.025, 0.975)
+  ) |>
+    as.data.frame() |>
+    bind_cols(categorical_prediction_grid)
+
+  categorical_predicted_stress_by_time
+}
+```
+
+```{r analysis-7-predicted-stress-plot}
+if (!is.null(stress_time_categorical_model)) {
+  ggplot(
+    categorical_predicted_stress_by_time,
+    aes(x = time_point, y = Estimate, group = 1)
+  ) +
+    geom_line(color = "#1f2937", linewidth = 0.8) +
+    geom_errorbar(
+      aes(ymin = Q2.5, ymax = Q97.5),
+      width = 0.08,
+      color = "#3b6ea8",
+      linewidth = 0.7
+    ) +
+    geom_point(size = 2.5, color = "#1f2937") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "#6b7280") +
+    labs(
+      title = "Estimated average perceived stress by categorical time point",
+      x = "Time point",
+      y = "Expected perceived stress (standardized)"
+    ) +
+    theme_minimal()
+}
+```
+
+```{r analysis-7-model-comparison}
+if (
+  !is.null(stress_time_model) &&
+    !is.null(stress_time_categorical_model) &&
+    requireNamespace("loo", quietly = TRUE)
+) {
+  model_1_loo <- loo::loo(stress_time_model)
+  model_2_loo <- loo::loo(stress_time_categorical_model)
+
+  loo::loo_compare(model_1_loo, model_2_loo)
+}
+```
+
+**Interpretation guide:** In Model 2, `b_time_pointtp2` is the expected difference between TP2 and TP1, while `b_time_pointtp4` is the expected difference between TP4 and TP1. Negative values mean lower perceived stress than TP1. The probability table translates these contrasts into direct Bayesian statements about whether later waves are likely lower than earlier waves.
+
+## Analysis 8 - Predictor Screening
+
+The baseline models show that educator-level differences are a major source of variation in perceived stress. Before adding predictors, we screen candidate job-demand and job-resource variables for coverage, numeric behavior, and availability across waves.
+
+This step is intentionally conservative. A predictor should not be added only because it exists in the data. It should have a defensible construct meaning, enough observed values, and a measurement pattern that matches the model we want to fit.
+
+```{r analysis-8-predictor-candidate-search}
+predictor_patterns <- c(
+  "demand", "support", "resource", "satisf", "effic", "burn",
+  "work", "job", "class", "center", "teacher", "director",
+  "supervisor", "cowork", "control", "autonomy", "climate"
+)
+
+predictor_candidates <- find_candidate_columns(column_inventory, predictor_patterns) |>
+  filter(
+    !grepl("StudyID|time_point", column, ignore.case = TRUE)
+  ) |>
+  arrange(file, column)
+
+predictor_candidates |>
+  select(file, column, missing_rate) |>
+  head(120)
+```
+
+```{r analysis-8-numeric-predictor-profiles}
+predictor_profile_columns <- predictor_candidates |>
+  filter(missing_rate < 0.50) |>
+  mutate(
+    time_point = case_when(
+      grepl("TP1", file, ignore.case = TRUE) ~ "tp1",
+      grepl("TP2", file, ignore.case = TRUE) ~ "tp2",
+      grepl("TP3", file, ignore.case = TRUE) ~ "tp3",
+      grepl("TP4", file, ignore.case = TRUE) ~ "tp4",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(!is.na(time_point)) |>
+  select(time_point, column)
+
+numeric_predictor_profiles <- profile_numeric_columns(
+  timepoint_data,
+  predictor_profile_columns
+) |>
+  filter(
+    n_observed >= 30,
+    is.finite(mean),
+    is.finite(sd),
+    sd > 0
+  ) |>
+  mutate(
+    range = max - min,
+    likely_scale_score = grepl(
+      "sum|total|score|scale|mean|av$|avg",
+      column,
+      ignore.case = TRUE
+    )
+  ) |>
+  arrange(desc(likely_scale_score), time_point, column)
+
+numeric_predictor_profiles
+```
+
+```{r analysis-8-repeated-predictor-names}
+normalize_predictor_name <- function(x) {
+  x <- tolower(x)
+  x <- gsub("tp[1-4]|_tp[1-4]|tp[1-4]_|_t[1-4]|t[1-4]_", "", x)
+  x <- gsub("[^a-z0-9]+", "_", x)
+  gsub("^_|_$", "", x)
+}
+
+repeated_predictor_name_patterns <- numeric_predictor_profiles |>
+  mutate(
+    normalized_name = normalize_predictor_name(column)
+  ) |>
+  group_by(normalized_name) |>
+  summarise(
+    time_points_observed = n_distinct(time_point),
+    observed_time_points = paste(sort(unique(time_point)), collapse = ", "),
+    candidate_columns = paste(unique(column), collapse = ", "),
+    min_n_observed = min(n_observed),
+    likely_scale_score = any(likely_scale_score),
+    .groups = "drop"
+  ) |>
+  arrange(desc(time_points_observed), desc(likely_scale_score), desc(min_n_observed))
+
+repeated_predictor_name_patterns |>
+  head(40)
+```
+
+```{r analysis-8-core-predictor-coverage}
+core_predictor_coverage <- core_scale_long |>
+  filter(construct != "perceived_stress") |>
+  group_by(construct) |>
+  summarise(
+    observations = n(),
+    educators = n_distinct(StudyID),
+    time_points_observed = n_distinct(time_point),
+    observed_time_points = paste(sort(unique(as.character(time_point))), collapse = ", "),
+    mean = mean(value),
+    sd = sd(value),
+    min = min(value),
+    max = max(value),
+    .groups = "drop"
+  ) |>
+  arrange(desc(time_points_observed), desc(observations))
+
+core_predictor_coverage
+```
+
+**Interpretation guide:** The first table searches broadly for possible job-demand and job-resource columns. The second profiles numeric candidates with reasonable coverage. The third tries to identify variables that appear repeatedly across waves by normalizing column names. The final table focuses on constructs already harmonized in the core panel. A strong next predictor should have clear construct meaning, enough observations, and comparable measurement across waves.
+
+## Analysis 9 - Job Satisfaction Model Readiness
+
+`job_satisfaction_work` is the strongest current candidate for a first explanatory predictor. It is theoretically interpretable as a work-resource or work-attitude construct and is already harmonized in the core scale panel. Before fitting a model, we check how many observations remain when perceived stress and job satisfaction are both observed.
+
+```{r analysis-9-job-satisfaction-model-data}
+job_satisfaction_model_data <- core_scale_panel |>
+  filter(
+    !is.na(perceived_stress),
+    !is.na(job_satisfaction_work)
+  ) |>
+  mutate(
+    time_point = droplevels(time_point),
+    perceived_stress_z = standardize_numeric(perceived_stress),
+    job_satisfaction_work_z = standardize_numeric(job_satisfaction_work),
+    time_index_z = standardize_numeric(time_index)
+  )
+
+job_satisfaction_model_summary <- job_satisfaction_model_data |>
+  summarise(
+    observations = n(),
+    educators = n_distinct(StudyID),
+    time_points = n_distinct(time_point),
+    educators_with_repeated_observations = sum(table(StudyID) > 1),
+    mean_observations_per_educator = observations / educators
+  )
+
+job_satisfaction_model_summary
+```
+
+```{r analysis-9-job-satisfaction-coverage-by-time}
+job_satisfaction_model_data |>
+  group_by(time_point) |>
+  summarise(
+    observations = n(),
+    educators = n_distinct(StudyID),
+    mean_perceived_stress = mean(perceived_stress),
+    sd_perceived_stress = sd(perceived_stress),
+    mean_job_satisfaction_work = mean(job_satisfaction_work),
+    sd_job_satisfaction_work = sd(job_satisfaction_work),
+    .groups = "drop"
+  )
+```
+
+```{r analysis-9-job-satisfaction-observations-per-educator}
+job_satisfaction_model_data |>
+  count(StudyID, name = "observations") |>
+  count(observations, name = "educators") |>
+  arrange(observations)
+```
+
+```{r analysis-9-job-satisfaction-stress-plot}
+ggplot(
+  job_satisfaction_model_data,
+  aes(x = job_satisfaction_work_z, y = perceived_stress_z)
+) +
+  geom_point(alpha = 0.75, color = "#374151") +
+  geom_smooth(method = "lm", se = TRUE, color = "#b35c2e") +
+  facet_wrap(~ time_point, nrow = 1) +
+  labs(
+    title = "Job satisfaction and perceived stress",
+    x = "Job satisfaction with work (standardized)",
+    y = "Perceived stress (standardized)"
+  ) +
+  theme_minimal()
+```
+
+**Interpretation guide:** If the available-case dataset retains enough repeated observations, the next model can estimate whether educators with higher job satisfaction tend to report lower perceived stress after accounting for time and educator-level clustering. Because this predictor is observed only where it overlaps with perceived stress, the model should be framed as exploratory.
+
+## Analysis 10 - Exploratory Job Satisfaction Model
+
+This model is exploratory because it uses only the waves where perceived stress and job satisfaction with work are both observed. The available-case dataset includes TP1 and TP4, so the model should be interpreted as an association between job satisfaction and perceived stress within the overlapping measurement window, not as a complete longitudinal explanation across all waves.
+
+Model formula:
+
+```text
+perceived_stress_z ~ time_index_z + job_satisfaction_work_z + (1 | StudyID)
+```
+
+```{r analysis-10-fit-job-satisfaction-model}
+if (!requireNamespace("brms", quietly = TRUE)) {
+  job_satisfaction_model <- NULL
+  message("brms is not installed. Install brms before fitting the Bayesian model.")
+} else {
+  library(brms)
+
+  dir.create("models", showWarnings = FALSE)
+  job_satisfaction_model_path <- "models/job_satisfaction_model.rds"
+
+  job_satisfaction_priors <- c(
+    prior(normal(0, 0.5), class = "b"),
+    prior(normal(0, 1), class = "Intercept"),
+    prior(exponential(1), class = "sd"),
+    prior(exponential(1), class = "sigma")
+  )
+
+  if (file.exists(job_satisfaction_model_path)) {
+    job_satisfaction_model <- readRDS(job_satisfaction_model_path)
+    message("Loaded saved model from: ", job_satisfaction_model_path)
+  } else if (
+    exists("job_satisfaction_model") &&
+      inherits(job_satisfaction_model, "brmsfit")
+  ) {
+    saveRDS(job_satisfaction_model, job_satisfaction_model_path)
+    message("Saved existing model to: ", job_satisfaction_model_path)
+  } else {
+    job_satisfaction_model <- brm(
+      perceived_stress_z ~ time_index_z + job_satisfaction_work_z + (1 | StudyID),
+      data = job_satisfaction_model_data,
+      family = gaussian(),
+      prior = job_satisfaction_priors,
+      chains = 4,
+      iter = 2000,
+      warmup = 1000,
+      seed = 20260610,
+      control = list(adapt_delta = 0.95)
+    )
+
+    saveRDS(job_satisfaction_model, job_satisfaction_model_path)
+    message("Saved model to: ", job_satisfaction_model_path)
+  }
+}
+```
+
+```{r analysis-10-fit-job-satisfaction-baseline-model}
+if (!requireNamespace("brms", quietly = TRUE)) {
+  job_satisfaction_baseline_model <- NULL
+  message("brms is not installed. Install brms before fitting the Bayesian model.")
+} else {
+  library(brms)
+
+  dir.create("models", showWarnings = FALSE)
+  job_satisfaction_baseline_model_path <- "models/job_satisfaction_baseline_model.rds"
+
+  job_satisfaction_baseline_priors <- c(
+    prior(normal(0, 0.5), class = "b"),
+    prior(normal(0, 1), class = "Intercept"),
+    prior(exponential(1), class = "sd"),
+    prior(exponential(1), class = "sigma")
+  )
+
+  if (file.exists(job_satisfaction_baseline_model_path)) {
+    job_satisfaction_baseline_model <- readRDS(job_satisfaction_baseline_model_path)
+    message("Loaded saved model from: ", job_satisfaction_baseline_model_path)
+  } else if (
+    exists("job_satisfaction_baseline_model") &&
+      inherits(job_satisfaction_baseline_model, "brmsfit")
+  ) {
+    saveRDS(job_satisfaction_baseline_model, job_satisfaction_baseline_model_path)
+    message("Saved existing model to: ", job_satisfaction_baseline_model_path)
+  } else {
+    job_satisfaction_baseline_model <- brm(
+      perceived_stress_z ~ time_index_z + (1 | StudyID),
+      data = job_satisfaction_model_data,
+      family = gaussian(),
+      prior = job_satisfaction_baseline_priors,
+      chains = 4,
+      iter = 2000,
+      warmup = 1000,
+      seed = 20260610,
+      control = list(adapt_delta = 0.95)
+    )
+
+    saveRDS(job_satisfaction_baseline_model, job_satisfaction_baseline_model_path)
+    message("Saved model to: ", job_satisfaction_baseline_model_path)
+  }
+}
+```
+
+```{r analysis-10-job-satisfaction-model-summary}
+if (!is.null(job_satisfaction_model)) {
+  summary(job_satisfaction_model)
+}
+```
+
+```{r analysis-10-job-satisfaction-posterior-probabilities}
+if (!is.null(job_satisfaction_model)) {
+  job_satisfaction_draws <- posterior::as_draws_df(job_satisfaction_model)
+
+  data.frame(
+    estimand = c(
+      "Job satisfaction effect below zero",
+      "Job satisfaction effect below -0.10 SD",
+      "Time effect below zero"
+    ),
+    posterior_probability = c(
+      mean(job_satisfaction_draws$b_job_satisfaction_work_z < 0),
+      mean(job_satisfaction_draws$b_job_satisfaction_work_z < -0.10),
+      mean(job_satisfaction_draws$b_time_index_z < 0)
+    )
+  )
+}
+```
+
+```{r analysis-10-job-satisfaction-posterior-intervals}
+if (!is.null(job_satisfaction_model)) {
+  posterior::summarise_draws(
+    posterior::as_draws_df(job_satisfaction_model),
+    mean = mean,
+    median = median,
+    sd = sd,
+    q025 = ~ quantile(.x, probs = 0.025),
+    q975 = ~ quantile(.x, probs = 0.975)
+  ) |>
+    filter(
+      variable %in% c(
+        "b_Intercept",
+        "b_time_index_z",
+        "b_job_satisfaction_work_z",
+        "sd_StudyID__Intercept",
+        "sigma"
+      )
+    )
+}
+```
+
+```{r analysis-10-job-satisfaction-effect-plot}
+if (!is.null(job_satisfaction_model)) {
+  ggplot(job_satisfaction_draws, aes(x = b_job_satisfaction_work_z)) +
+    geom_density(fill = "#3b6ea8", alpha = 0.35, color = "#1f2937") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "#991b1b") +
+    labs(
+      title = "Posterior distribution of the job satisfaction effect",
+      x = "Effect of job satisfaction on perceived stress (standardized units)",
+      y = "Posterior density"
+    ) +
+    theme_minimal()
+}
+```
+
+```{r analysis-10-job-satisfaction-predictions}
+if (!is.null(job_satisfaction_model)) {
+  job_satisfaction_prediction_grid <- data.frame(
+    job_satisfaction_work_z = c(-1, 0, 1),
+    time_index_z = 0
+  )
+
+  job_satisfaction_predictions <- fitted(
+    job_satisfaction_model,
+    newdata = job_satisfaction_prediction_grid,
+    re_formula = NA,
+    summary = TRUE,
+    probs = c(0.025, 0.975)
+  ) |>
+    as.data.frame() |>
+    bind_cols(
+      job_satisfaction_prediction_grid |>
+        mutate(job_satisfaction_level = c("Low (-1 SD)", "Average", "High (+1 SD)"))
+    )
+
+  job_satisfaction_predictions
+}
+```
+
+```{r analysis-10-job-satisfaction-prediction-plot}
+if (!is.null(job_satisfaction_model)) {
+  ggplot(
+    job_satisfaction_predictions,
+    aes(x = job_satisfaction_level, y = Estimate, group = 1)
+  ) +
+    geom_line(color = "#1f2937", linewidth = 0.8) +
+    geom_errorbar(
+      aes(ymin = Q2.5, ymax = Q97.5),
+      width = 0.08,
+      color = "#3b6ea8",
+      linewidth = 0.7
+    ) +
+    geom_point(size = 2.5, color = "#1f2937") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "#6b7280") +
+    labs(
+      title = "Expected perceived stress by job satisfaction level",
+      x = "Job satisfaction with work",
+      y = "Expected perceived stress (standardized)"
+    ) +
+    theme_minimal()
+}
+```
+
+```{r analysis-10-job-satisfaction-model-comparison}
+if (
+  !is.null(job_satisfaction_model) &&
+    !is.null(job_satisfaction_baseline_model) &&
+    requireNamespace("loo", quietly = TRUE)
+) {
+  job_satisfaction_model_loo <- loo::loo(job_satisfaction_model)
+  job_satisfaction_baseline_model_loo <- loo::loo(job_satisfaction_baseline_model)
+
+  loo::loo_compare(job_satisfaction_model_loo, job_satisfaction_baseline_model_loo)
+}
+```
+
+**Interpretation guide:** `b_job_satisfaction_work_z` is the expected change in perceived stress, in standard deviation units, for a one-standard-deviation increase in job satisfaction. A negative posterior distribution supports the interpretation that higher job satisfaction is associated with lower perceived stress. The LOO comparison evaluates whether adding job satisfaction improves expected out-of-sample prediction relative to a baseline model fit on the same available-case dataset.
+
 ## Next Modeling Plan
 
-The next step is to use the codebook to define:
+The next step is to use the modeling-readiness results and the codebook to define:
 
 - the primary stress or well-being outcome;
 - educator identifier;
